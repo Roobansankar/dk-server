@@ -28,6 +28,7 @@ class ComboResource extends JsonResource
                 'price' => (float) $item->price,
                 // The product's normal storefront price, for reference only.
                 'selling_price' => $item->product?->selling_price !== null ? (float) $item->product->selling_price : null,
+                'stock_quantity' => (int) ($item->product?->stock_quantity ?? 0),
                 'available' => (bool) ($item->product && ! $item->product->trashed() && $item->product->status),
             ])->values()),
             'created_at' => $this->created_at,

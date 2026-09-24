@@ -86,6 +86,8 @@ class OrderPricing
             $lines[] = $line;
         }
 
+        self::assertStockAvailable($items, $lines);
+
         return [
             'items' => $lines,
             'subtotal_paise' => $subtotalPaise,
@@ -234,6 +236,69 @@ class OrderPricing
             'unit_paise' => $unitPaise,
             'selected_products' => $selected,
         ];
+    }
+
+    /**
+     * Fail fast when the basket asks for more units than are in stock.
+     *
+     * The atomic check in ProductInventoryService::recordSale() remains the
+     * authority at payment verification time; this pre-check rejects the
+     * oversell at POST /api/checkout instead — before any Razorpay order or
+     * payment exists.
+     */
+    private static function assertStockAvailable(array $items, array $lines): void
+    {
+        $required = [];
+        $firstIndex = [];
+
+        foreach ($lines as $index => $line) {
+            $quantity = (int) $line['quantity'];
+
+            if ($line['combo_id'] !== null) {
+                foreach ($line['selected_products'] as $selected) {
+                    $productId = (int) $selected['product_id'];
+                    $required[$productId] = ($required[$productId] ?? 0) + $quantity;
+                    $firstIndex[$productId] ??= $index;
+                }
+
+                continue;
+            }
+
+            if ($line['product_id'] !== null) {
+                $productId = (int) $line['product_id'];
+                $required[$productId] = ($required[$productId] ?? 0) + $quantity;
+                $firstIndex[$productId] ??= $index;
+            }
+        }
+
+        if ($required === []) {
+            return;
+        }
+
+        $products = Product::query()
+            ->whereIn('id', array_keys($required))
+            ->get()
+            ->keyBy('id');
+
+        foreach ($required as $productId => $quantity) {
+            $product = $products->get($productId);
+            $index = $firstIndex[$productId] ?? 0;
+
+            if (! $product || ! $product->status) {
+                continue;
+            }
+
+            $available = (int) $product->stock_quantity;
+
+            if ($available < $quantity) {
+                self::fail(
+                    "items.$index.quantity",
+                    $available <= 0
+                        ? "“{$product->name}” is out of stock."
+                        : "Only {$available} of “{$product->name}” available."
+                );
+            }
+        }
     }
 
     /**

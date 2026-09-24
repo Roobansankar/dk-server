@@ -7,13 +7,12 @@ use App\Http\Requests\Admin\UpdateVideoRequest;
 use Tests\TestCase;
 
 /**
- * Video uploads deliberately have no application-level size limit (see
- * config('salon.video_uploads') and both Form Requests' docblocks) — only
- * format is validated; App\Support\VideoUploader transcodes whatever comes
- * through regardless of size. This guards against that limit quietly coming
- * back, since a real oversized-file HTTP test would depend on the machine's
- * own php.ini (exactly the infrastructure setting this app must not enforce
- * a duplicate of).
+ * Video uploads are capped at config('salon.video_uploads.max_kb')
+ * (default 25 MB) — format AND size are validated; larger files are
+ * rejected with a message naming the limit. This guards against the cap
+ * quietly disappearing, since an oversized-file HTTP test would depend on
+ * the machine's own php.ini (which must separately stay above the cap —
+ * exactly the infrastructure setting this app must not duplicate below it).
  */
 class VideoUploadValidationTest extends TestCase
 {
@@ -22,7 +21,7 @@ class VideoUploadValidationTest extends TestCase
         return array_filter($rules['video'], fn ($rule) => is_string($rule));
     }
 
-    public function test_store_video_request_has_no_size_rule(): void
+    public function test_store_video_request_has_size_rule(): void
     {
         $rules = $this->videoRule((new StoreVideoRequest)->rules());
 
@@ -30,13 +29,15 @@ class VideoUploadValidationTest extends TestCase
             collect($rules)->contains(fn ($r) => str_starts_with($r, 'mimes:')),
             'Expected the mimes rule to still be enforced.',
         );
-        $this->assertFalse(
-            collect($rules)->contains(fn ($r) => str_starts_with($r, 'max:')),
-            'Video upload must not have an application-level size limit.',
+        $this->assertContains(
+            'max:'.config('salon.video_uploads.max_kb'),
+            $rules,
+            'Video upload must enforce the application-level size limit.',
         );
+        $this->assertSame(25600, config('salon.video_uploads.max_kb'));
     }
 
-    public function test_update_video_request_has_no_size_rule(): void
+    public function test_update_video_request_has_size_rule(): void
     {
         $rules = $this->videoRule((new UpdateVideoRequest)->rules());
 
@@ -44,15 +45,24 @@ class VideoUploadValidationTest extends TestCase
             collect($rules)->contains(fn ($r) => str_starts_with($r, 'mimes:')),
             'Expected the mimes rule to still be enforced.',
         );
-        $this->assertFalse(
-            collect($rules)->contains(fn ($r) => str_starts_with($r, 'max:')),
-            'Video upload must not have an application-level size limit.',
+        $this->assertContains(
+            'max:'.config('salon.video_uploads.max_kb'),
+            $rules,
+            'Video upload must enforce the application-level size limit.',
         );
     }
 
-    public function test_video_uploads_config_has_no_max_kb(): void
+    public function test_video_uploads_config_has_max_kb(): void
     {
-        $this->assertArrayNotHasKey('max_kb', config('salon.video_uploads'));
+        $this->assertArrayHasKey('max_kb', config('salon.video_uploads'));
         $this->assertSame(['mp4', 'mov', 'webm', 'mkv', 'avi'], config('salon.video_uploads.mimes'));
+    }
+
+    public function test_video_max_message_names_the_limit(): void
+    {
+        $messages = (new StoreVideoRequest)->messages();
+
+        $this->assertArrayHasKey('video.max', $messages);
+        $this->assertStringContainsString('25 MB', $messages['video.max']);
     }
 }

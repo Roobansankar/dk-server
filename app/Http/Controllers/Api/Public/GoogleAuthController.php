@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Laravel\Socialite\Facades\Socialite;
 use Throwable;
@@ -47,21 +49,41 @@ class GoogleAuthController extends Controller
         return response()->json(['url' => $url]);
     }
 
-    public function callback(): RedirectResponse
+    public function callback(Request $request): RedirectResponse
     {
         if (! $this->configured()) {
+            Log::warning('Google OAuth callback hit while Google sign-in is not configured.');
+
+            return redirect()->away($this->frontendUrl('/login?google_error=1'));
+        }
+
+        if ($request->has('error')) {
+            // User denied consent (or Google refused) — Google bounces back
+            // with ?error=access_denied instead of a code.
+            Log::warning('Google OAuth callback returned an error from Google.', [
+                'error' => $request->query('error'),
+            ]);
+
             return redirect()->away($this->frontendUrl('/login?google_error=1'));
         }
 
         try {
             $googleUser = Socialite::driver('google')->stateless()->user();
-        } catch (Throwable) {
-            // Denied consent, expired/invalid code, network failure, etc. —
-            // never a fake success; always bounce back to a clean error state.
+        } catch (Throwable $e) {
+            // Expired/invalid code, redirect-uri or client-secret mismatch,
+            // network failure, etc. — never a fake success; always bounce
+            // back to a clean error state.
+            Log::warning('Google OAuth code exchange failed.', [
+                'exception' => get_class($e),
+                'message' => $e->getMessage(),
+            ]);
+
             return redirect()->away($this->frontendUrl('/login?google_error=1'));
         }
 
         if (! $googleUser->getEmail()) {
+            Log::warning('Google OAuth succeeded but Google returned no email address.');
+
             return redirect()->away($this->frontendUrl('/login?google_error=1'));
         }
 
@@ -93,6 +115,10 @@ class GoogleAuthController extends Controller
         }
 
         if (! $user->isActive()) {
+            Log::warning('Google sign-in refused for an inactive user account.', [
+                'user_id' => $user->id,
+            ]);
+
             return redirect()->away($this->frontendUrl('/login?google_error=1'));
         }
 

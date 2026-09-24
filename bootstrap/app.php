@@ -60,13 +60,16 @@ return Application::configure(basePath: dirname(__DIR__))
         });
 
         // Laravel's default message for this is generic ("The POST data is
-        // too large..."); an admin uploading a video needs to know it's the
-        // server's post_max_size/upload_max_filesize, not a bug.
+        // too large..."); an admin uploading a video needs to know whether
+        // it's the server's post_max_size/upload_max_filesize or the app's
+        // own video cap (config('salon.video_uploads.max_kb')) — the
+        // server's must stay above the app's, so hitting this means the
+        // server setting, not a bug.
         $exceptions->render(function (PostTooLargeException $e, Request $request) {
             if ($request->is('api/*') || $request->expectsJson()) {
                 return response()->json([
-                    'message' => 'This upload is larger than the server currently allows. Ask an admin to raise '.
-                        'the server\'s post_max_size/upload_max_filesize, or use a smaller file.',
+                    'message' => 'This upload is larger than the server currently allows (its post_max_size/upload_max_filesize, '.
+                        'which must stay above the app\'s own video limit). Ask an admin to raise the server setting, or use a smaller file.',
                 ], 413);
             }
         });

@@ -8,15 +8,22 @@ use Illuminate\Http\UploadedFile;
 /**
  * Shared by Store/UpdateVideoRequest.
  *
- * Reproduced against a real 7.66 MB phone-camera export with this server's
- * default php.ini (upload_max_filesize=2M): PHP itself rejects the file
- * (UPLOAD_ERR_INI_SIZE) before Laravel's controller ever runs, which makes
- * `UploadedFile::isValid()` false. Laravel's Validator short-circuits THAT
- * case on its own — see Illuminate\Validation\Validator::validateAttribute(),
- * the `$value instanceof UploadedFile && ! $value->isValid()` check — and
- * always fails with its built-in `uploaded` rule ("The :attribute failed to
- * upload.") *before* evaluating any of this request's own rules, including a
- * custom closure rule. There is no way to out-prioritize that from `rules()`.
+ * Two different ceilings can reject a file, at two different layers:
+ *
+ * 1. The app's own cap (config('salon.video_uploads.max_kb'), default
+ *    60 MB) — enforced by the `max` rule in rules(), with a message naming
+ *    the limit.
+ * 2. The server's PHP upload_max_filesize/post_max_size, which MUST stay
+ *    above the app cap. PHP itself rejects such a file
+ *    (UPLOAD_ERR_INI_SIZE) before Laravel's controller ever runs, which
+ *    makes `UploadedFile::isValid()` false. Laravel's Validator
+ *    short-circuits THAT case on its own — see
+ *    Illuminate\Validation\Validator::validateAttribute(), the
+ *    `$value instanceof UploadedFile && ! $value->isValid()` check — and
+ *    always fails with its built-in `uploaded` rule ("The :attribute failed
+ *    to upload.") *before* evaluating any of this request's own rules,
+ *    including a custom closure rule. There is no way to out-prioritize
+ *    that from `rules()`.
  *
  * The one hook that runs after it: a `withValidator()` `after()` callback,
  * which can inspect the real PHP upload error code and replace the generic
@@ -38,7 +45,8 @@ trait ValidatesVideoFile
 
             $message = match ($file->getError()) {
                 UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'This file is larger than the server currently allows for uploads '.
-                    '(its upload_max_filesize/post_max_size — the app itself has no size limit). Ask an admin to raise the server '.
+                    '(its upload_max_filesize/post_max_size — which must stay above the app\'s own '.
+                    round(config('salon.video_uploads.max_kb') / 1024).' MB video limit). Ask an admin to raise the server '.
                     'setting, or use a smaller file.',
                 UPLOAD_ERR_PARTIAL => 'The upload was interrupted before it finished. Please try again.',
                 UPLOAD_ERR_NO_TMP_DIR, UPLOAD_ERR_CANT_WRITE => 'The server could not save the uploaded file (no writable temp '.
