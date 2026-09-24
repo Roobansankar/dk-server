@@ -18,6 +18,7 @@ class Permission extends SpatiePermission
         'payments' => ['payments.view', 'payments.export'],
         'services' => ['services.view', 'services.create', 'services.update', 'services.delete'],
         'products' => ['products.view', 'products.create', 'products.update', 'products.delete'],
+        'orders' => ['orders.view', 'orders.manage'],
         'stylists' => ['stylists.view', 'stylists.manage'],
         'pricing' => ['pricing.view', 'pricing.manage'],
         'gallery' => ['gallery.view', 'gallery.manage'],

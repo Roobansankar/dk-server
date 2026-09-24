@@ -8,6 +8,8 @@ use App\Http\Requests\Admin\StoreProductRequest;
 use App\Http\Requests\Admin\UpdateProductRequest;
 use App\Http\Resources\ProductResource;
 use App\Models\Product;
+use App\Models\ProductStockMovement;
+use App\Services\ProductInventoryService;
 use App\Support\ImageUploader;
 use App\Support\Slug;
 use Illuminate\Http\Request;
@@ -20,15 +22,19 @@ class ProductController extends Controller
         $products = Product::query()
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->boolean('status')))
             ->when($request->filled('search'), fn ($q) => $q->where('name', 'like', '%'.$request->string('search').'%'))
+            ->withSum(
+                ['stockMovements as items_sold' => fn ($q) => $q->where('type', ProductStockMovement::TYPE_SALE)],
+                'quantity'
+            )
             ->ordered()
             ->paginate($request->integer('per_page', 25));
 
         return ProductResource::collection($products);
     }
 
-    public function store(StoreProductRequest $request)
+    public function store(StoreProductRequest $request, ProductInventoryService $inventory)
     {
-        $data = $request->safe()->except(['image', 'is_featured']);
+        $data = $request->safe()->except(['image', 'is_featured', 'stock_quantity']);
         $data['slug'] = Slug::unique(Product::class, $request->string('name'));
 
         if ($request->hasFile('image')) {
@@ -43,7 +49,10 @@ class ProductController extends Controller
             $product->applyFeatured(true);
         }
 
-        return (new ProductResource($product))->response()->setStatusCode(201);
+        // Opening stock goes through the inventory ledger, not mass assignment.
+        $this->syncStock($product, $request, $inventory, 'Opening stock');
+
+        return (new ProductResource($product->fresh()))->response()->setStatusCode(201);
     }
 
     public function show(Product $product)
@@ -51,9 +60,9 @@ class ProductController extends Controller
         return new ProductResource($product);
     }
 
-    public function update(UpdateProductRequest $request, Product $product)
+    public function update(UpdateProductRequest $request, Product $product, ProductInventoryService $inventory)
     {
-        $data = $request->safe()->except(['image', 'remove_image', 'is_featured']);
+        $data = $request->safe()->except(['image', 'remove_image', 'is_featured', 'stock_quantity']);
 
         if ($request->filled('name')) {
             $data['slug'] = Slug::unique(Product::class, $data['name'], 'slug', null, $product->id);
@@ -75,7 +84,29 @@ class ProductController extends Controller
             $product->applyFeatured($request->boolean('is_featured'));
         }
 
+        $this->syncStock($product, $request, $inventory, 'Stock set from product form');
+
         return new ProductResource($product->fresh());
+    }
+
+    /**
+     * Bring stock_quantity to the submitted "Stock Available" value by
+     * recording the difference as a restock/adjustment movement, so every change
+     * stays in the stock history.
+     */
+    private function syncStock(Product $product, Request $request, ProductInventoryService $inventory, string $reason): void
+    {
+        if (! $request->has('stock_quantity')) {
+            return;
+        }
+
+        $delta = (int) $request->validated('stock_quantity') - (int) $product->fresh()->stock_quantity;
+
+        if ($delta > 0) {
+            $inventory->restock($product, $delta, $reason, $request->user()?->id);
+        } elseif ($delta < 0) {
+            $inventory->adjust($product, $delta, $reason, $request->user()?->id);
+        }
     }
 
     public function destroy(Product $product)

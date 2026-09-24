@@ -1,8 +1,11 @@
 <?php
 
 use App\Http\Controllers\Api\Admin\AppointmentController as AdminAppointmentController;
+use App\Http\Controllers\Api\Admin\ProductInventoryController;
+use App\Http\Controllers\Api\Admin\ComboController as AdminComboController;
 use App\Http\Controllers\Api\Admin\DashboardController;
 use App\Http\Controllers\Api\Admin\GalleryImageController as AdminGalleryController;
+use App\Http\Controllers\Api\Admin\OrderController as AdminOrderController;
 use App\Http\Controllers\Api\Admin\PaymentReportController;
 use App\Http\Controllers\Api\Admin\PermissionController;
 use App\Http\Controllers\Api\Admin\PricingPlanController as AdminPricingPlanController;
@@ -19,10 +22,13 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\Public\AccountController;
 use App\Http\Controllers\Api\Public\AppointmentController;
 use App\Http\Controllers\Api\Public\AuthController as CustomerAuthController;
+use App\Http\Controllers\Api\Public\ComboController;
 use App\Http\Controllers\Api\Public\GalleryController;
 use App\Http\Controllers\Api\Public\GoogleAuthController;
+use App\Http\Controllers\Api\Public\OrderController;
 use App\Http\Controllers\Api\Public\PaymentController;
 use App\Http\Controllers\Api\Public\PricingPlanController;
+use App\Http\Controllers\Api\Public\ProductCheckoutController;
 use App\Http\Controllers\Api\Public\ProductController;
 use App\Http\Controllers\Api\Public\ReviewController as CustomerReviewController;
 use App\Http\Controllers\Api\Public\SearchController;
@@ -53,6 +59,7 @@ Route::get('service-categories/{serviceCategory}', [ServiceCategoryController::c
 Route::get('services', [ServiceController::class, 'index']);
 Route::get('services/{service}', [ServiceController::class, 'show']);
 Route::get('products', [ProductController::class, 'index']);
+Route::get('combos', [ComboController::class, 'index']);
 Route::get('gallery', [GalleryController::class, 'index']);
 Route::get('videos', [VideoController::class, 'index']);
 Route::get('stylists', [StylistController::class, 'index']);
@@ -71,6 +78,15 @@ Route::get('search', [SearchController::class, 'index']);
 // enforced here via middleware, not just trusted from the frontend.
 Route::get('appointments/busy', [AppointmentController::class, 'busy']);
 Route::post('appointments', [AppointmentController::class, 'store'])->middleware(['throttle:10,1', 'auth:sanctum']);
+
+// Product checkout (Buy Now / cart) — signed-in customers only. `checkout`
+// prices the basket server-side (App\Support\OrderPricing) and opens a
+// Razorpay order; the product order itself is only created by `verify`, after
+// the payment signature checks out.
+Route::middleware(['throttle:10,1', 'auth:sanctum'])->group(function () {
+    Route::post('checkout', [ProductCheckoutController::class, 'store']);
+    Route::post('checkout/{checkout}/verify', [ProductCheckoutController::class, 'verify']);
+});
 
 /*
 |--------------------------------------------------------------------------
@@ -92,6 +108,8 @@ Route::prefix('account')->group(function () {
         Route::match(['put', 'patch'], 'profile', [AccountController::class, 'update']);
         Route::match(['put', 'patch'], 'password', [AccountController::class, 'updatePassword']);
         Route::get('appointments', [AccountController::class, 'appointments']);
+        Route::get('orders', [OrderController::class, 'index']);
+        Route::get('orders/{order}', [OrderController::class, 'show']);
     });
 });
 
@@ -164,15 +182,50 @@ Route::prefix('admin')->middleware(['auth:sanctum'])->group(function () {
     Route::match(['put', 'patch'], 'pricing-plans/{pricingPlan}', [AdminPricingPlanController::class, 'update'])->middleware('permission:pricing.manage');
     Route::delete('pricing-plans/{pricingPlan}', [AdminPricingPlanController::class, 'destroy'])->middleware('permission:pricing.manage');
 
-    // Products (retail shelf shown on the public site)
+  // Products (retail shelf shown on the public site)
+Route::middleware('permission:products.view')->group(function () {
+    Route::get('products', [AdminProductController::class, 'index']);
+    Route::get('products/{product}', [AdminProductController::class, 'show']);
+});
+
+Route::post('products/reorder', [AdminProductController::class, 'reorder'])
+    ->middleware('permission:products.update');
+
+Route::post('products', [AdminProductController::class, 'store'])
+    ->middleware('permission:products.create');
+
+Route::match(['put', 'patch'], 'products/{product}', [AdminProductController::class, 'update'])
+    ->middleware('permission:products.update');
+
+Route::delete('products/{product}', [AdminProductController::class, 'destroy'])
+    ->middleware('permission:products.delete');
+
+// Product stock management
+Route::get('inventory', [ProductInventoryController::class, 'index'])
+    ->middleware('permission:products.view');
+
+Route::get('inventory/history', [ProductInventoryController::class, 'history'])
+    ->middleware('permission:products.view');
+
+Route::post('inventory/products/{product}/restock', [ProductInventoryController::class, 'restock'])
+    ->middleware('permission:products.update');
+
+Route::post('inventory/products/{product}/adjust', [ProductInventoryController::class, 'adjust'])
+    ->middleware('permission:products.update');
+    // Combo products (included products + combo-specific prices) — same
+    // permissions as the product catalogue they're built from.
     Route::middleware('permission:products.view')->group(function () {
-        Route::get('products', [AdminProductController::class, 'index']);
-        Route::get('products/{product}', [AdminProductController::class, 'show']);
+        Route::get('combos', [AdminComboController::class, 'index']);
+        Route::get('combos/{combo}', [AdminComboController::class, 'show']);
     });
-    Route::post('products/reorder', [AdminProductController::class, 'reorder'])->middleware('permission:products.update');
-    Route::post('products', [AdminProductController::class, 'store'])->middleware('permission:products.create');
-    Route::match(['put', 'patch'], 'products/{product}', [AdminProductController::class, 'update'])->middleware('permission:products.update');
-    Route::delete('products/{product}', [AdminProductController::class, 'destroy'])->middleware('permission:products.delete');
+    Route::post('combos', [AdminComboController::class, 'store'])->middleware('permission:products.create');
+    Route::match(['put', 'patch'], 'combos/{combo}', [AdminComboController::class, 'update'])->middleware('permission:products.update');
+    Route::delete('combos/{combo}', [AdminComboController::class, 'destroy'])->middleware('permission:products.delete');
+
+    // Product orders
+    Route::get('orders', [AdminOrderController::class, 'index'])->middleware('permission:orders.view');
+    Route::get('orders/{order}', [AdminOrderController::class, 'show'])->middleware('permission:orders.view');
+    Route::match(['put', 'patch'], 'orders/{order}/status', [AdminOrderController::class, 'updateStatus'])->middleware('permission:orders.manage');
 
     // Appointments (operational list + history + offline history all use the
     // same filtered endpoint; offline history just pins ?source=offline)

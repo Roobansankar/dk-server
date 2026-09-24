@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
 
@@ -18,6 +19,7 @@ class Product extends Model
         'image_path',
         'mrp',
         'selling_price',
+        'tax_percent',
         'gst_inclusive',
         'status',
         'is_featured',
@@ -29,6 +31,7 @@ class Product extends Model
         return [
             'mrp' => 'decimal:2',
             'selling_price' => 'decimal:2',
+	    'tax_percent' => 'decimal:2',
             'gst_inclusive' => 'boolean',
             'status' => 'boolean',
             'is_featured' => 'boolean',
@@ -44,6 +47,11 @@ class Product extends Model
         }
 
         return round(max(0, (float) $this->mrp - (float) $this->selling_price), 2);
+    }
+
+    public function stockMovements(): HasMany
+    {
+        return $this->hasMany(ProductStockMovement::class);
     }
 
     public function scopeActive($query)

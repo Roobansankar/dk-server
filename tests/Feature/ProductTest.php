@@ -227,4 +227,36 @@ class ProductTest extends TestCase
 
         $this->getJson('/api/admin/products')->assertForbidden();
     }
+
+    public function test_stock_available_is_recorded_through_stock_movements(): void
+    {
+        $this->actingAsToken($this->superadmin());
+
+        $id = $this->postJson('/api/admin/products', $this->payload(['stock_quantity' => 10, 'tax_percent' => 5]))
+            ->assertCreated()
+            ->assertJsonPath('data.stock_quantity', 10)
+            ->assertJsonPath('data.tax_percent', fn ($v) => (float) $v === 5.0)
+            ->json('data.id');
+
+        $this->putJson("/api/admin/products/{$id}", ['stock_quantity' => 4])
+            ->assertOk()
+            ->assertJsonPath('data.stock_quantity', 4);
+
+        $this->assertDatabaseHas('product_stock_movements', ['product_id' => $id, 'type' => 'restock', 'quantity' => 10]);
+        $this->assertDatabaseHas('product_stock_movements', ['product_id' => $id, 'type' => 'adjustment', 'quantity' => -6]);
+    }
+
+    public function test_admin_list_reports_items_sold_from_sale_movements(): void
+    {
+        $this->actingAsToken($this->superadmin());
+        $product = Product::create($this->payload(['slug' => 'repair-hair-mask']));
+
+        $product->stockMovements()->create(['type' => 'restock', 'quantity' => 10, 'balance_after' => 10]);
+        $product->stockMovements()->create(['type' => 'sale', 'quantity' => -3, 'balance_after' => 7]);
+        $product->stockMovements()->create(['type' => 'sale', 'quantity' => -2, 'balance_after' => 5]);
+
+        $this->getJson('/api/admin/products')
+            ->assertOk()
+            ->assertJsonPath('data.0.items_sold', 5);
+    }
 }
