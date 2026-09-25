@@ -38,5 +38,11 @@
              call is made in tests (Http::fake in RazorpayPaymentTest). -->
         <env name="RAZORPAY_KEY_ID" value="rzp_test_ci_dummy_key"/>
         <env name="RAZORPAY_KEY_SECRET" value="ci-dummy-secret-not-a-real-credential"/>
+        <!-- WhatsApp is switched OFF in tests. The real token lives in .env, and
+             booking/confirm tests would otherwise send live WhatsApp messages
+             to the made-up phone numbers their factories generate. -->
+        <env name="WHATSAPP_ENABLED" value="false"/>
+        <env name="WHATSAPP_TOKEN" value=""/>
+        <env name="WHATSAPP_PHONE_NUMBER_ID" value=""/>
     </php>
 </phpunit>

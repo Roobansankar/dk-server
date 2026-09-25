@@ -7,6 +7,8 @@ use App\Http\Resources\AppointmentResource;
 use App\Models\Appointment;
 use App\Support\AppointmentSlots;
 use App\Support\Razorpay;
+use App\Support\WhatsApp;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -170,6 +172,14 @@ class PaymentController extends Controller
 
             return $locked;
         });
+
+        // WhatsApp confirmation to the CUSTOMER's own number — fire-and-forget.
+        // Never blocks/fails the payment response if Meta is down or misconfigured.
+        try {
+            DB::afterCommit(fn () => WhatsApp::sendBookingConfirmed($confirmed->fresh()));
+        } catch (\Throwable $e) {
+            Log::warning('WhatsApp after payment verify skipped: '.$e->getMessage());
+        }
 
         return (new AppointmentResource($confirmed->load(['service', 'serviceCategory', 'stylist'])))
             ->additional(['message' => 'Payment verified. Your appointment is confirmed.']);

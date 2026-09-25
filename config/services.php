@@ -52,4 +52,20 @@ return [
         'redirect' => env('GOOGLE_REDIRECT_URI'),
     ],
 
+    // WhatsApp Cloud API (Meta) — booking confirmations via App\Support\WhatsApp.
+    // Token + phone_number_id come from Meta Dashboard → WhatsApp → API Setup.
+    // Blank token/id disables sending silently (booking itself is unaffected).
+    'whatsapp' => [
+        'token' => env('WHATSAPP_TOKEN'),
+        'phone_number_id' => env('WHATSAPP_PHONE_NUMBER_ID'),
+        'waba_id' => env('WHATSAPP_WABA_ID'),
+        'template' => env('WHATSAPP_TEMPLATE_BOOKING_CONFIRMED', 'booking_confirmed'),
+        'language' => env('WHATSAPP_TEMPLATE_LANG', 'en'),
+        'enabled' => env('WHATSAPP_ENABLED', true),
+        // Webhook (POST/GET /api/whatsapp/webhook): the string you type as "Verify token" in
+        // Meta's Configuration screen, and the app secret (App settings → Basic) that signs events.
+        'verify_token' => env('WHATSAPP_VERIFY_TOKEN'),
+        'app_secret' => env('WHATSAPP_APP_SECRET'),
+    ],
+
 ];

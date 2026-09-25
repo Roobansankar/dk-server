@@ -38,6 +38,7 @@ use App\Http\Controllers\Api\Public\ServiceController;
 use App\Http\Controllers\Api\Public\SiteSettingController;
 use App\Http\Controllers\Api\Public\StylistController;
 use App\Http\Controllers\Api\Public\VideoController;
+use App\Http\Controllers\Api\Public\WhatsAppWebhookController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -120,6 +121,13 @@ Route::prefix('account')->group(function () {
 // verification for an already-created, still-pending online appointment.
 Route::post('appointments/{appointment}/payment/order', [PaymentController::class, 'order'])->middleware('throttle:10,1');
 Route::post('appointments/{appointment}/payment/verify', [PaymentController::class, 'verify'])->middleware('throttle:10,1');
+
+// WhatsApp Cloud API (Meta) webhook — the "Callback URL" in Meta's WhatsApp →
+// Configuration: https://<domain>/api/whatsapp/webhook. Called by Meta's servers
+// (no login), so it is protected by the verify token (GET) and the app-secret
+// signature (POST) instead — see WhatsAppWebhookController.
+Route::get('whatsapp/webhook', [WhatsAppWebhookController::class, 'verify']);
+Route::post('whatsapp/webhook', [WhatsAppWebhookController::class, 'receive']);
 
 /*
 |--------------------------------------------------------------------------
@@ -236,6 +244,8 @@ Route::post('inventory/products/{product}/adjust', [ProductInventoryController::
     Route::get('appointments/export', [AdminAppointmentController::class, 'export'])->middleware('permission:appointments.view');
     Route::post('appointments', [AdminAppointmentController::class, 'store'])->middleware('permission:appointments.offline');
     Route::get('appointments/{appointment}', [AdminAppointmentController::class, 'show'])->middleware('permission:appointments.view');
+    // Bill / invoice PDF for one appointment (paid-in-full stamp when paid).
+    Route::get('appointments/{appointment}/bill', [AdminAppointmentController::class, 'bill'])->middleware('permission:appointments.view');
     // Confirm a pending appointment: verifies the slot is free for the stylist
     // and locks the full service duration atomically.
     Route::post('appointments/{appointment}/confirm', [AdminAppointmentController::class, 'confirm'])->middleware('permission:appointments.manage');

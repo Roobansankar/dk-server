@@ -12,6 +12,10 @@ use App\Models\Stylist;
 use App\Support\AppointmentFilters;
 use App\Support\AppointmentSlots;
 use App\Support\AppointmentsWorkbook;
+use App\Support\WhatsApp;
+use App\Models\SiteSetting;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -107,6 +111,15 @@ class AppointmentController extends Controller
             return $appointment;
         });
 
+        // Walk-in created already-confirmed → notify the customer too (best-effort).
+        if ($appointment->status === Appointment::STATUS_CONFIRMED) {
+            try {
+                DB::afterCommit(fn () => WhatsApp::sendBookingConfirmed($appointment->fresh()));
+            } catch (\Throwable $e) {
+                Log::warning('WhatsApp after offline store skipped: '.$e->getMessage());
+            }
+        }
+
         return (new AppointmentResource($appointment))
             ->additional(['message' => 'Offline appointment created.'])
             ->response()->setStatusCode(201);
@@ -115,6 +128,27 @@ class AppointmentController extends Controller
     public function show(Appointment $appointment)
     {
         return new AppointmentResource($appointment->load(['service', 'serviceCategory', 'stylist']));
+    }
+
+    /**
+     * Download a bill / invoice PDF for one appointment (any payment state —
+     * the header stamp reads PAID IN FULL only when payment_status = paid,
+     * otherwise it shows the recorded state). Same data the detail dialog
+     * already shows — service, stylist, price, received, balance.
+     */
+    public function bill(Appointment $appointment)
+    {
+        $settings = SiteSetting::allValues();
+
+        $pdf = Pdf::loadView('pdf.bill', [
+            'appointment' => $appointment,
+            'salonName' => $settings->get('salon_name', 'DK StyleHub'),
+            'salonPhone' => $settings->get('phone'),
+            'salonAddress' => $settings->get('address'),
+            'generatedAt' => now(),
+        ])->setPaper('a4');
+
+        return $pdf->download('bill-'.$appointment->reference.'.pdf');
     }
 
     /**
@@ -261,6 +295,13 @@ class AppointmentController extends Controller
 
             return $locked;
         });
+
+        // Admin pressed Confirm → notify the customer on WhatsApp (best-effort).
+        try {
+            DB::afterCommit(fn () => WhatsApp::sendBookingConfirmed($confirmed->fresh()));
+        } catch (\Throwable $e) {
+            Log::warning('WhatsApp after admin confirm skipped: '.$e->getMessage());
+        }
 
         return (new AppointmentResource($confirmed->load(['service', 'serviceCategory', 'stylist'])))
             ->additional(['message' => 'Appointment confirmed. The time slot is now blocked for this stylist.']);
