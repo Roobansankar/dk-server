@@ -35,6 +35,7 @@ class OfflineAppointmentTest extends TestCase
             'gender' => 'female',
             'category_id' => $service->service_category_id,
             'service_id' => $service->id,
+            'stylist_id' => $overrides['stylist_id'] ?? Stylist::factory()->create()->id,
             'appointment_date' => now()->toDateString(),
             'appointment_time' => '15:30',
             'payment_status' => 'advance_paid',
@@ -75,6 +76,80 @@ class OfflineAppointmentTest extends TestCase
         $this->actingAsToken($this->userWith(['appointments.view', 'appointments.manage']));
 
         $this->postJson('/api/admin/appointments', $this->payload())->assertForbidden();
+    }
+
+    public function test_offline_appointment_saves_and_returns_each_payment_method(): void
+    {
+        $this->actingAsToken($this->superadmin());
+        $service = $this->activeService();
+
+        foreach (['upi', 'cash', 'card'] as $i => $method) {
+            $id = $this->postJson('/api/admin/appointments', $this->payload([
+                '_service' => $service,
+                'appointment_time' => sprintf('%02d:00', 10 + $i),
+                'payment_status' => 'paid',
+                'payment_method' => $method,
+            ]))
+                ->assertCreated()
+                ->assertJsonPath('data.payment_method', $method)
+                ->json('data.id');
+
+            $this->assertDatabaseHas('appointments', ['id' => $id, 'payment_method' => $method]);
+            $this->getJson("/api/admin/appointments/{$id}")->assertOk()->assertJsonPath('data.payment_method', $method);
+        }
+    }
+
+    public function test_payment_method_can_be_edited_on_offline_appointments_only(): void
+    {
+        $this->actingAsToken($this->superadmin());
+        $service = $this->activeService();
+
+        $offlineId = $this->postJson('/api/admin/appointments', $this->payload([
+            '_service' => $service,
+            'payment_method' => 'cash',
+        ]))->assertCreated()->json('data.id');
+
+        $this->patchJson("/api/admin/appointments/{$offlineId}", ['payment_method' => 'card'])
+            ->assertOk()
+            ->assertJsonPath('data.payment_method', 'card');
+
+        $online = Appointment::factory()->forService($service)->create();
+
+        $this->patchJson("/api/admin/appointments/{$online->id}", ['payment_method' => 'upi'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('payment_method');
+
+        $this->getJson("/api/admin/appointments/{$online->id}")
+            ->assertOk()
+            ->assertJsonMissingPath('data.payment_method');
+        $this->assertNull($online->fresh()->payment_method);
+    }
+
+    public function test_offline_appointment_requires_a_stylist(): void
+    {
+        $this->actingAsToken($this->superadmin());
+
+        $payload = $this->payload();
+        unset($payload['stylist_id']);
+
+        $this->postJson('/api/admin/appointments', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('stylist_id');
+
+        $this->postJson('/api/admin/appointments', $this->payload(['stylist_id' => null]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('stylist_id');
+
+        $this->assertDatabaseCount('appointments', 0);
+    }
+
+    public function test_offline_appointment_rejects_an_unknown_payment_method(): void
+    {
+        $this->actingAsToken($this->superadmin());
+
+        $this->postJson('/api/admin/appointments', $this->payload(['payment_method' => 'cheque']))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('payment_method');
     }
 
     public function test_offline_appointments_are_isolable_by_source_but_still_appear_in_the_full_list(): void
