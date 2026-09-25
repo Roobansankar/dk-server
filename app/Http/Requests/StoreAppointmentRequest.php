@@ -4,7 +4,9 @@ namespace App\Http\Requests;
 
 use App\Models\Service;
 use App\Models\SiteSetting;
+use App\Models\Stylist;
 use App\Support\AppointmentSlots;
+use App\Support\BookingAvailability;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
@@ -72,17 +74,6 @@ class StoreAppointmentRequest extends FormRequest
                 return;
             }
 
-            // The studio's fixed midday break is never bookable, even
-            // partially — a service may not start inside it or run through it.
-            if (AppointmentSlots::crossesBreak($time, $service->duration_minutes)) {
-                $validator->errors()->add(
-                    'appointment_time',
-                    'That time falls in the studio\'s break. Please choose another slot.',
-                );
-
-                return;
-            }
-
             // A request for today (studio time) must start at or after the
             // SAME rounded floor the booking form's picker generates its
             // first slot from (see AppointmentSlots::earliestBookableTime) —
@@ -105,27 +96,26 @@ class StoreAppointmentRequest extends FormRequest
                 return;
             }
 
-            // A confirmed appointment locks its full duration, plus a
-            // required buffer either side, for its stylist. This is a fast,
+            // The professional must offer this service, be working for its whole
+            // duration, and be free (a confirmed appointment locks its duration
+            // plus a buffer either side). With no professional chosen ("any")
+            // at least one eligible one must qualify. This is a fast,
             // unlocked first pass purely for a friendly validation message —
             // it can't be the authoritative check (nothing here is locked
-            // against a concurrent request), so it's re-checked atomically,
+            // against a concurrent request), so it's re-decided atomically,
             // under a stylist/day lock, immediately before the appointment
             // is actually created (see Public\AppointmentController::store).
-            $conflict = AppointmentSlots::findConflict(
-                $this->filled('stylist_id') ? $this->integer('stylist_id') : null,
-                $this->input('appointment_date'),
-                $this->input('appointment_time'),
-                $service->duration_minutes,
-                null,
-                AppointmentSlots::ONLINE_BUFFER_MINUTES,
+            $stylist = $this->filled('stylist_id') ? Stylist::find($this->integer('stylist_id')) : null;
+
+            [, $error] = BookingAvailability::resolve(
+                $service,
+                $stylist,
+                $requestedDate->toDateString(),
+                $time,
             );
 
-            if ($conflict) {
-                $validator->errors()->add(
-                    'appointment_time',
-                    'That time is no longer available with the selected stylist. Please choose another slot.',
-                );
+            if ($error) {
+                $validator->errors()->add('appointment_time', $error);
             }
         });
     }

@@ -8,11 +8,12 @@ use App\Models\SiteSetting;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Tests\Concerns\CreatesAdmins;
+use Tests\Concerns\CreatesBookableStylists;
 use Tests\TestCase;
 
 class ShopHoursTest extends TestCase
 {
-    use CreatesAdmins, RefreshDatabase;
+    use CreatesAdmins, CreatesBookableStylists, RefreshDatabase;
 
     protected function setUp(): void
     {
@@ -29,8 +30,11 @@ class ShopHoursTest extends TestCase
     private function activeService(int $minutes = 60): Service
     {
         $category = ServiceCategory::factory()->female()->create();
+        $service = Service::factory()->forCategory($category)->create(['duration_minutes' => $minutes]);
 
-        return Service::factory()->forCategory($category)->create(['duration_minutes' => $minutes]);
+        $this->bookableStylistFor($service);
+
+        return $service;
     }
 
     private function bookingPayload(Service $service, string $time): array

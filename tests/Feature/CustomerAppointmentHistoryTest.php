@@ -8,11 +8,12 @@ use App\Models\ServiceCategory;
 use App\Models\Stylist;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns\CreatesAdmins;
+use Tests\Concerns\CreatesBookableStylists;
 use Tests\TestCase;
 
 class CustomerAppointmentHistoryTest extends TestCase
 {
-    use CreatesAdmins, RefreshDatabase;
+    use CreatesAdmins, CreatesBookableStylists, RefreshDatabase;
 
     public function test_appointment_history_requires_authentication(): void
     {
@@ -167,7 +168,7 @@ class CustomerAppointmentHistoryTest extends TestCase
             'duration_minutes' => 30,
             'advance_percentage' => 0,
         ]);
-        $stylist = Stylist::factory()->create();
+        $stylist = $this->bookableStylistFor($service);
 
         return [$category, $service, $stylist];
     }

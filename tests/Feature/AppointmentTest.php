@@ -7,17 +7,22 @@ use App\Models\Service;
 use App\Models\ServiceCategory;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns\CreatesAdmins;
+use Tests\Concerns\CreatesBookableStylists;
 use Tests\TestCase;
 
 class AppointmentTest extends TestCase
 {
-    use CreatesAdmins, RefreshDatabase;
+    use CreatesAdmins, CreatesBookableStylists, RefreshDatabase;
 
     private function activeService(): Service
     {
         $category = ServiceCategory::factory()->female()->create();
+        $service = Service::factory()->forCategory($category)->create();
 
-        return Service::factory()->forCategory($category)->create();
+        // "Any professional" needs someone who offers the service.
+        $this->bookableStylistFor($service);
+
+        return $service;
     }
 
     public function test_an_authenticated_customer_can_submit_an_appointment_request(): void

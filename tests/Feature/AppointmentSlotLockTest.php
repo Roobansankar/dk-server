@@ -8,6 +8,7 @@ use App\Models\ServiceCategory;
 use App\Models\Stylist;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns\CreatesAdmins;
+use Tests\Concerns\CreatesBookableStylists;
 use Tests\TestCase;
 
 /**
@@ -16,7 +17,7 @@ use Tests\TestCase;
  */
 class AppointmentSlotLockTest extends TestCase
 {
-    use CreatesAdmins, RefreshDatabase;
+    use CreatesAdmins, CreatesBookableStylists, RefreshDatabase;
 
     private string $date = '2026-10-05';
 
@@ -216,6 +217,7 @@ class AppointmentSlotLockTest extends TestCase
         $this->actingAsToken($this->customer());
         $stylist = Stylist::factory()->create();
         $service = $this->service(90);
+        $this->offerServices($stylist, $service);
 
         Appointment::factory()->forService($service)->forStylist($stylist)->create([
             'status' => Appointment::STATUS_CONFIRMED,
@@ -235,13 +237,44 @@ class AppointmentSlotLockTest extends TestCase
         ])->assertStatus(422)->assertJsonValidationErrors('appointment_time');
     }
 
-    public function test_public_booking_with_no_stylist_is_not_blocked(): void
+    public function test_public_booking_with_no_stylist_is_assigned_to_a_free_professional(): void
     {
         $this->actingAsToken($this->customer());
-        $stylist = Stylist::factory()->create();
+        $busy = Stylist::factory()->create(['sort_order' => 1]);
+        $free = Stylist::factory()->create(['sort_order' => 2]);
         $service = $this->service(90);
+        $this->offerServices($busy, $service);
+        $this->offerServices($free, $service);
 
-        Appointment::factory()->forService($service)->forStylist($stylist)->create([
+        Appointment::factory()->forService($service)->forStylist($busy)->create([
+            'status' => Appointment::STATUS_CONFIRMED,
+            'appointment_date' => $this->date,
+            'appointment_time' => '14:00',
+        ]);
+
+        // The first professional in roster order is busy at 14:30, so the
+        // booking goes to the next one who is free — never left unassigned.
+        $this->postJson('/api/appointments', [
+            'customer_name' => 'Priya R',
+            'phone' => '+91 9790431212',
+            'gender' => 'female',
+            'category_id' => $service->service_category_id,
+            'service_id' => $service->id,
+            'appointment_date' => $this->date,
+            'appointment_time' => '14:30',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.stylist_id', $free->id);
+    }
+
+    public function test_public_booking_with_no_stylist_is_rejected_when_everyone_is_busy(): void
+    {
+        $this->actingAsToken($this->customer());
+        $only = Stylist::factory()->create();
+        $service = $this->service(90);
+        $this->offerServices($only, $service);
+
+        Appointment::factory()->forService($service)->forStylist($only)->create([
             'status' => Appointment::STATUS_CONFIRMED,
             'appointment_date' => $this->date,
             'appointment_time' => '14:00',
@@ -255,7 +288,7 @@ class AppointmentSlotLockTest extends TestCase
             'service_id' => $service->id,
             'appointment_date' => $this->date,
             'appointment_time' => '14:30',
-        ])->assertCreated();
+        ])->assertStatus(422)->assertJsonValidationErrors('appointment_time');
     }
 
     public function test_offline_confirmed_creation_is_rejected_when_it_overlaps(): void

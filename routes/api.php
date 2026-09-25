@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\Admin\VideoController as AdminVideoController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\Public\AccountController;
 use App\Http\Controllers\Api\Public\AppointmentController;
+use App\Http\Controllers\Api\Public\BookingSlotsController;
 use App\Http\Controllers\Api\Public\AuthController as CustomerAuthController;
 use App\Http\Controllers\Api\Public\ComboController;
 use App\Http\Controllers\Api\Public\GalleryController;
@@ -77,6 +78,8 @@ Route::get('search', [SearchController::class, 'index']);
 // Api\Public\AppointmentController::store) — the ownership requirement is
 // enforced here via middleware, not just trusted from the frontend.
 Route::get('appointments/busy', [AppointmentController::class, 'busy']);
+// Bookable times for a service on a date (with one professional, or anyone who offers it).
+Route::get('booking/slots', [BookingSlotsController::class, 'index'])->middleware('throttle:120,1');
 Route::post('appointments', [AppointmentController::class, 'store'])->middleware(['throttle:10,1', 'auth:sanctum']);
 
 // Product checkout (Buy Now / cart) — signed-in customers only. `checkout`
@@ -243,7 +246,12 @@ Route::post('inventory/products/{product}/adjust', [ProductInventoryController::
     Route::middleware('permission:stylists.view')->group(function () {
         Route::get('stylists', [AdminStylistController::class, 'index']);
         Route::get('stylists/{stylist}', [AdminStylistController::class, 'show']);
+        // Services offered + weekly working hours (the "Services & hours" page).
+        Route::get('stylists/{stylist}/setup', [AdminStylistController::class, 'setup']);
     });
+    Route::put('stylists/{stylist}/services', [AdminStylistController::class, 'syncServices'])->middleware('permission:stylists.manage');
+    Route::put('stylists/{stylist}/work-hours', [AdminStylistController::class, 'updateWorkHours'])->middleware('permission:stylists.manage');
+    Route::put('stylists/{stylist}/date-hours', [AdminStylistController::class, 'updateDateHours'])->middleware('permission:stylists.manage');
     Route::post('stylists/reorder', [AdminStylistController::class, 'reorder'])->middleware('permission:stylists.manage');
     Route::post('stylists', [AdminStylistController::class, 'store'])->middleware('permission:stylists.manage');
     Route::match(['put', 'patch'], 'stylists/{stylist}', [AdminStylistController::class, 'update'])->middleware('permission:stylists.manage');

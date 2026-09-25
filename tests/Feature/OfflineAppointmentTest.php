@@ -8,11 +8,12 @@ use App\Models\ServiceCategory;
 use App\Models\Stylist;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns\CreatesAdmins;
+use Tests\Concerns\CreatesBookableStylists;
 use Tests\TestCase;
 
 class OfflineAppointmentTest extends TestCase
 {
-    use CreatesAdmins, RefreshDatabase;
+    use CreatesAdmins, CreatesBookableStylists, RefreshDatabase;
 
     private function activeService(): Service
     {
@@ -96,6 +97,7 @@ class OfflineAppointmentTest extends TestCase
         $this->actingAsToken($this->customer());
         $service = $this->activeService();
         $stylist = Stylist::factory()->create(['name' => 'Karan M']);
+        $this->offerServices($stylist, $service);
 
         $this->postJson('/api/appointments', [
             'customer_name' => 'Priya R',

@@ -10,6 +10,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Testing\TestResponse;
 use Tests\Concerns\CreatesAdmins;
+use Tests\Concerns\CreatesBookableStylists;
 use Tests\TestCase;
 
 /**
@@ -27,7 +28,7 @@ use Tests\TestCase;
  */
 class BookingConcurrencyTest extends TestCase
 {
-    use CreatesAdmins, RefreshDatabase;
+    use CreatesAdmins, CreatesBookableStylists, RefreshDatabase;
 
     private function fakeOrdersKeyedByReceipt(): void
     {
@@ -183,6 +184,7 @@ class BookingConcurrencyTest extends TestCase
         $this->actingAsToken($this->customer());
         $stylist = Stylist::factory()->create();
         $service = $this->service(40);
+        $this->offerServices($stylist, $service);
         $date = now()->addDays(5)->toDateString();
 
         Appointment::factory()->forService($service)->forStylist($stylist)->create([

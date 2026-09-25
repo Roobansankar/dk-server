@@ -12,6 +12,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Testing\TestResponse;
 use Tests\Concerns\CreatesAdmins;
+use Tests\Concerns\CreatesBookableStylists;
 use Tests\TestCase;
 
 /**
@@ -23,7 +24,7 @@ use Tests\TestCase;
  */
 class BookingSlotBufferTest extends TestCase
 {
-    use CreatesAdmins, RefreshDatabase;
+    use CreatesAdmins, CreatesBookableStylists, RefreshDatabase;
 
     private string $date = '2026-10-05';
 
@@ -59,6 +60,8 @@ class BookingSlotBufferTest extends TestCase
 
     private function book(Service $service, Stylist $stylist, string $time, ?string $date = null): TestResponse
     {
+        $this->offerServices($stylist, $service);
+
         return $this->postJson('/api/appointments', [
             'customer_name' => 'Priya R',
             'phone' => '+91 9790431212',

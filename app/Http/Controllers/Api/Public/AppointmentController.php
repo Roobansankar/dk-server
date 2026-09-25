@@ -9,7 +9,7 @@ use App\Http\Resources\BusySlotResource;
 use App\Models\Appointment;
 use App\Models\Service;
 use App\Models\Stylist;
-use App\Support\AppointmentSlots;
+use App\Support\BookingAvailability;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -52,8 +52,9 @@ class AppointmentController extends Controller
     public function store(StoreAppointmentRequest $request): JsonResponse
     {
         $service = Service::with('category')->findOrFail($request->integer('service_id'));
-        $stylistId = $request->filled('stylist_id') ? $request->integer('stylist_id') : null;
-        $stylist = $stylistId ? Stylist::find($stylistId) : null;
+        $requestedStylist = $request->filled('stylist_id')
+            ? Stylist::find($request->integer('stylist_id'))
+            : null;
         // The route requires `auth:sanctum`, so `$request->user()` is always
         // present here. Ownership is derived solely from the authenticated
         // token — there is no `user_id` field anywhere in
@@ -61,28 +62,24 @@ class AppointmentController extends Controller
         // never claim someone else's account.
         $userId = $request->user()->id;
 
-        $appointment = DB::transaction(function () use ($request, $service, $stylistId, $stylist, $userId) {
-            // Lock this stylist's whole day BEFORE the final conflict check
-            // and the write, so a concurrent request for the same/
-            // overlapping slot serialises here instead of racing past the
-            // check (see AppointmentSlots::lockDay). The FormRequest already
-            // ran this same check unlocked, purely for a fast validation
+        $appointment = DB::transaction(function () use ($request, $service, $requestedStylist, $userId) {
+            // Decide who takes this booking while holding the professional's
+            // whole-day lock, so a concurrent request for the same/overlapping
+            // slot serialises here instead of racing past the check (see
+            // AppointmentSlots::lockDay). With no professional chosen ("any"),
+            // this assigns the first eligible one who is free. The FormRequest
+            // ran the same rules unlocked, purely for a fast validation
             // message — this is the one that actually has to hold.
-            AppointmentSlots::lockDay($stylistId, $request->input('appointment_date'));
-
-            $conflict = AppointmentSlots::findConflict(
-                $stylistId,
-                $request->input('appointment_date'),
+            [$stylist, $error] = BookingAvailability::resolve(
+                $service,
+                $requestedStylist,
+                $request->date('appointment_date')->toDateString(),
                 $request->input('appointment_time'),
-                $service->duration_minutes,
-                null,
-                AppointmentSlots::ONLINE_BUFFER_MINUTES,
+                lock: true,
             );
 
-            if ($conflict) {
-                throw ValidationException::withMessages([
-                    'appointment_time' => 'That time is no longer available with the selected stylist. Please choose another slot.',
-                ]);
+            if (! $stylist) {
+                throw ValidationException::withMessages(['appointment_time' => $error]);
             }
 
             $appointment = new Appointment([
