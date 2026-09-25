@@ -110,17 +110,23 @@ class Appointment extends Model
         });
     }
 
-    /** Copy the current service configuration onto the appointment. */
-    public function applyServiceSnapshot(Service $service): void
+    /**
+     * Copy the current service configuration onto the appointment. When a
+     * professional is given, their own price / advance for the service (if the
+     * admin set one) is what gets snapshotted — and therefore what is charged.
+     */
+    public function applyServiceSnapshot(Service $service, ?Stylist $stylist = null): void
     {
+        $terms = $service->termsFor($stylist);
+
         $this->service_id = $service->id;
         $this->service_category_id = $service->service_category_id;
         $this->category_name = $service->category?->name;
         $this->service_name = $service->name;
         $this->duration_minutes = $service->duration_minutes;
-        $this->service_price = $service->price;
-        $this->advance_percentage = $service->advance_percentage;
-        $this->advance_amount = $service->advance_amount;
+        $this->service_price = $terms['price'];
+        $this->advance_percentage = $terms['advance_percentage'];
+        $this->advance_amount = $terms['advance_amount'];
     }
 
     /** Snapshot the chosen stylist. Null = "any available stylist". */

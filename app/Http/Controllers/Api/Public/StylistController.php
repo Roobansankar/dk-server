@@ -24,8 +24,7 @@ class StylistController extends Controller
                 // Only active services count towards what a professional offers.
                 ->with([
                     'services' => fn ($q) => $q->where('services.status', true)->select('services.id'),
-                    'workHours',
-                    // Upcoming days off / custom hours, so the booking page can grey days out.
+                    // The upcoming dates each is available on — the booking page only offers these.
                     'dateHours' => fn ($q) => $q
                         ->whereDate('date', '>=', $today->toDateString())
                         ->whereDate('date', '<=', $today->copy()->addDays(self::DATE_HOURS_DAYS_AHEAD)->toDateString()),

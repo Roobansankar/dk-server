@@ -6,8 +6,7 @@ use Illuminate\Validation\Validator;
 
 /**
  * Checks one day's list of `{start, end}` working ranges the same way wherever
- * an admin enters them — the weekly pattern and the calendar's date-specific
- * hours: end after start, no overlaps, and inside the studio's opening hours.
+ * an admin enters them on the calendar: end after start, no overlaps, and inside the studio's opening hours.
  * Errors are added under "<prefix>.<index>.start|end" so the admin form can
  * show them next to the offending range.
  */

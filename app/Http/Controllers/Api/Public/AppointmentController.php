@@ -92,7 +92,7 @@ class AppointmentController extends Controller
                 'appointment_time' => $request->string('appointment_time'),
                 'status' => Appointment::STATUS_PENDING,
             ]);
-            $appointment->applyServiceSnapshot($service);
+            $appointment->applyServiceSnapshot($service, $stylist);
             $appointment->applyStylistSnapshot($stylist);
             $appointment->save();
 

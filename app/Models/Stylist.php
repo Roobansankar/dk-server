@@ -42,16 +42,40 @@ class Stylist extends Model
     /** The services this professional offers (which also fixes their genders and categories). */
     public function services(): BelongsToMany
     {
-        return $this->belongsToMany(Service::class, 'stylist_service')->withTimestamps();
+        return $this->belongsToMany(Service::class, 'stylist_service')
+            ->withPivot(['price', 'advance_percentage'])
+            ->withTimestamps();
     }
 
-    /** Their weekly working hours — see StylistWorkHour. */
-    public function workHours(): HasMany
+    /**
+     * This professional's own price / advance for the services that have one,
+     * as { "<service id>": { price, advance_percentage } }. A service with no
+     * override (NULL) is left out and uses the service's standard terms. Returned
+     * as an object so an empty map serialises as `{}`.
+     */
+    public function serviceTerms(): object
     {
-        return $this->hasMany(StylistWorkHour::class);
+        $terms = [];
+
+        foreach ($this->services as $service) {
+            $price = $service->pivot->price;
+            $percentage = $service->pivot->advance_percentage;
+
+            if ($price !== null || $percentage !== null) {
+                $terms[$service->id] = [
+                    'price' => $price !== null ? (float) $price : null,
+                    'advance_percentage' => $percentage !== null ? (int) $percentage : null,
+                ];
+            }
+        }
+
+        return (object) $terms;
     }
 
-    /** Date-specific hours (days off / custom days) that override the weekly pattern. */
+    /**
+     * The calendar dates they can be booked on, with the hours for each — see
+     * StylistDateHour. A date with no rows is a date they are not available.
+     */
     public function dateHours(): HasMany
     {
         return $this->hasMany(StylistDateHour::class);

@@ -49,7 +49,37 @@ class Service extends Model
     /** The professionals who offer this service. */
     public function stylists(): BelongsToMany
     {
-        return $this->belongsToMany(Stylist::class, 'stylist_service')->withTimestamps();
+        return $this->belongsToMany(Stylist::class, 'stylist_service')
+            ->withPivot(['price', 'advance_percentage'])
+            ->withTimestamps();
+    }
+
+    /**
+     * The price and advance for this service when $stylist does it: their own
+     * terms where the admin set them, otherwise the service's standard ones.
+     * With no stylist this is just the service's own price and advance.
+     *
+     * @return array{price: float|null, advance_percentage: int, advance_amount: float}
+     */
+    public function termsFor(?Stylist $stylist): array
+    {
+        $pivot = $stylist
+            ? $stylist->services()->where('services.id', $this->id)->first()?->pivot
+            : null;
+
+        $price = $pivot?->price !== null
+            ? (float) $pivot->price
+            : ($this->price !== null ? (float) $this->price : null);
+
+        $percentage = $pivot?->advance_percentage !== null
+            ? (int) $pivot->advance_percentage
+            : (int) $this->advance_percentage;
+
+        return [
+            'price' => $price,
+            'advance_percentage' => $percentage,
+            'advance_amount' => round(($price ?? 0) * $percentage / 100, 2),
+        ];
     }
 
     /** Gender is inherited from the parent category. */

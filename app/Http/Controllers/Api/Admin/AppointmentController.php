@@ -99,7 +99,7 @@ class AppointmentController extends Controller
                 'status' => $status,
                 'payment_status' => $request->input('payment_status', Appointment::PAYMENT_UNPAID),
             ]);
-            $appointment->applyServiceSnapshot($service);
+            $appointment->applyServiceSnapshot($service, $stylist);
             $appointment->applyStylistSnapshot($stylist);
             $appointment->save();
 

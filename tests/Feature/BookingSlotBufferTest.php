@@ -28,6 +28,12 @@ class BookingSlotBufferTest extends TestCase
 
     private string $date = '2026-10-05';
 
+    /** These tests book on fixed dates, so those are the dates the professionals work. */
+    protected function workDates(): array
+    {
+        return ['2026-10-05', '2026-10-06'];
+    }
+
     protected function setUp(): void
     {
         parent::setUp();

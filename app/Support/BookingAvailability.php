@@ -18,8 +18,9 @@ use Illuminate\Support\Collection;
  *
  * A time is bookable with a professional when
  *   1. they offer the service (stylist_service),
- *   2. the whole service fits inside one of their working ranges for that
- *      weekday (stylist_work_hours), further limited to the studio's opening
+ *   2. the whole service fits inside one of the hours an admin has set for
+ *      them on that calendar date (stylist_date_hours — a date with no hours
+ *      is simply not available), further limited to the studio's opening
  *      hours when those are set,
  *   3. it is not in the past (rounded like AppointmentSlots::earliestBookableTime), and
  *   4. it doesn't overlap one of their CONFIRMED appointments, padded by
@@ -32,20 +33,6 @@ class BookingAvailability
 {
     /** The studio's clock; every date/time on this flow is in this zone. */
     public const TZ = 'Asia/Kolkata';
-
-    /** Weekly ranges for a professional that has none yet: studio hours around the midday break. */
-    public static function defaultRanges(): array
-    {
-        $bounds = self::shopBounds() ?? [self::minutes('10:00'), self::minutes('19:30')];
-        [$open, $close] = $bounds;
-        [$breakStart, $breakEnd] = array_map(self::minutes(...), AppointmentSlots::STUDIO_BREAKS[0]);
-
-        $ranges = ($breakStart <= $open || $breakEnd >= $close)
-            ? [[$open, $close]]
-            : [[$open, $breakStart], [$breakEnd, $close]];
-
-        return array_map(fn ($r) => [self::format($r[0]), self::format($r[1])], $ranges);
-    }
 
     /** The studio's opening hours as [openMinutes, closeMinutes], or null when not (validly) set. */
     public static function shopBounds(): ?array
@@ -65,8 +52,8 @@ class BookingAvailability
     }
 
     /**
-     * Active professionals who offer $service and have working hours set,
-     * in roster order, with their hours loaded.
+     * Active professionals who offer $service and have hours set on an
+     * upcoming calendar date, in roster order.
      *
      * @return Collection<int, Stylist>
      */
@@ -76,49 +63,27 @@ class BookingAvailability
             ->active()
             ->ordered()
             ->offering($service->id)
-            ->where(fn ($q) => $q
-                ->whereHas('workHours')
-                // …or nothing weekly, but custom hours set for upcoming dates.
-                ->orWhereHas('dateHours', fn ($d) => $d
-                    ->whereNotNull('start_time')
-                    ->whereDate('date', '>=', Carbon::now(self::TZ)->toDateString())))
-            ->with('workHours')
+            ->whereHas('dateHours', fn ($d) => $d->whereDate('date', '>=', Carbon::now(self::TZ)->toDateString()))
             ->get();
     }
 
     /**
      * A professional's bookable ranges on $dateIso as [startMin, endMin] pairs,
-     * sorted, clipped to the studio's opening hours.
+     * sorted, clipped to the studio's opening hours. Only hours an admin has
+     * set for that exact date count — no set hours means no ranges at all.
      *
      * @return array<int, array{0: int, 1: int}>
      */
     public static function windows(Stylist $stylist, string $dateIso): array
     {
         $bounds = self::shopBounds();
-        $ranges = [];
 
-        // A date set on the calendar (custom hours, or a day off) replaces the
-        // weekly pattern for that date entirely.
-        $override = StylistDateHour::query()
+        $ranges = StylistDateHour::query()
             ->where('stylist_id', $stylist->id)
             ->whereDate('date', $dateIso)
-            ->get();
-
-        if ($override->isNotEmpty()) {
-            foreach ($override as $row) {
-                if (! $row->isOff()) {
-                    $ranges[] = [self::minutes($row->start()), self::minutes($row->end())];
-                }
-            }
-        } else {
-            $dayOfWeek = Carbon::parse($dateIso, self::TZ)->dayOfWeek;
-
-            foreach ($stylist->workHours as $row) {
-                if ($row->day_of_week === $dayOfWeek) {
-                    $ranges[] = [self::minutes($row->start()), self::minutes($row->end())];
-                }
-            }
-        }
+            ->get()
+            ->map(fn (StylistDateHour $row) => [self::minutes($row->start()), self::minutes($row->end())])
+            ->all();
 
         $out = [];
 
@@ -157,7 +122,7 @@ class BookingAvailability
         }
 
         $candidates = $stylist
-            ? collect([$stylist->loadMissing('workHours')])
+            ? collect([$stylist])
             : self::eligibleStylists($service);
 
         $floorAt = AppointmentSlots::earliestBookableTime(Carbon::parse($dateIso, self::TZ)->startOfDay(), $now);
@@ -258,7 +223,7 @@ class BookingAvailability
             if (! $stylist->services()->where('services.id', $service->id)->exists()) {
                 return [null, sprintf('%s doesn\'t offer this service. Please choose another professional or service.', $stylist->name)];
             }
-            $candidates = collect([$stylist->loadMissing('workHours')]);
+            $candidates = collect([$stylist]);
         } else {
             $candidates = self::eligibleStylists($service);
 

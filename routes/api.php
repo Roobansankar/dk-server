@@ -250,7 +250,6 @@ Route::post('inventory/products/{product}/adjust', [ProductInventoryController::
         Route::get('stylists/{stylist}/setup', [AdminStylistController::class, 'setup']);
     });
     Route::put('stylists/{stylist}/services', [AdminStylistController::class, 'syncServices'])->middleware('permission:stylists.manage');
-    Route::put('stylists/{stylist}/work-hours', [AdminStylistController::class, 'updateWorkHours'])->middleware('permission:stylists.manage');
     Route::put('stylists/{stylist}/date-hours', [AdminStylistController::class, 'updateDateHours'])->middleware('permission:stylists.manage');
     Route::post('stylists/reorder', [AdminStylistController::class, 'reorder'])->middleware('permission:stylists.manage');
     Route::post('stylists', [AdminStylistController::class, 'store'])->middleware('permission:stylists.manage');

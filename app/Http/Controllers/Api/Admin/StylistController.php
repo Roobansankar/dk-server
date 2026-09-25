@@ -8,13 +8,11 @@ use App\Http\Requests\Admin\StoreStylistRequest;
 use App\Http\Requests\Admin\SyncStylistServicesRequest;
 use App\Http\Requests\Admin\UpdateStylistDateHoursRequest;
 use App\Http\Requests\Admin\UpdateStylistRequest;
-use App\Http\Requests\Admin\UpdateStylistWorkHoursRequest;
 use App\Http\Resources\StylistResource;
 use App\Models\Appointment;
 use App\Models\ServiceCategory;
 use App\Models\Stylist;
 use App\Models\StylistDateHour;
-use App\Models\StylistWorkHour;
 use App\Support\BookingAvailability;
 use App\Support\ImageUploader;
 use App\Support\Slug;
@@ -27,14 +25,15 @@ class StylistController extends Controller
     public function index(Request $request)
     {
         $stylists = Stylist::query()
+            // Which services each offers, with their own prices (the offline-booking form uses them).
+            ->with(['services' => fn ($q) => $q->select('services.id')])
             ->withCount([
                 'appointments',
                 'services',
-                'workHours',
-                // Upcoming dates with custom hours (a professional can be scheduled by calendar alone).
-                'dateHours as custom_days_count' => fn ($q) => $q
-                    ->whereNotNull('start_time')
-                    ->whereDate('date', '>=', Carbon::now(BookingAvailability::TZ)->toDateString()),
+                // Upcoming calendar dates they have hours on — bookable only where this is > 0.
+                'dateHours as upcoming_days_count' => fn ($q) => $q
+                    ->whereDate('date', '>=', Carbon::now(BookingAvailability::TZ)->toDateString())
+                    ->select(DB::raw('count(distinct date)')),
             ])
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->boolean('status')))
             ->when($request->filled('search'), fn ($q) => $q->where('name', 'like', '%'.$request->string('search').'%'))
@@ -53,23 +52,11 @@ class StylistController extends Controller
             $data['image_path'] = ImageUploader::store($request->file('image'), 'stylists');
         }
 
-        $stylist = DB::transaction(function () use ($data) {
-            $stylist = Stylist::create($data);
+        // A new professional has no services and no dates: nothing is bookable
+        // until an admin sets them up on their "Services & hours" page.
+        $stylist = Stylist::create($data);
 
-            // A new professional starts on the studio's default weekly hours
-            // (they still need services before they can be booked).
-            self::replaceWorkHours($stylist, collect(range(0, 6))->map(fn ($day) => [
-                'day_of_week' => $day,
-                'ranges' => array_map(
-                    fn ($r) => ['start' => $r[0], 'end' => $r[1]],
-                    BookingAvailability::defaultRanges(),
-                ),
-            ])->all());
-
-            return $stylist;
-        });
-
-        return (new StylistResource($stylist->loadCount(['appointments', 'services', 'workHours'])))
+        return (new StylistResource($stylist->loadCount(['appointments', 'services'])))
             ->response()->setStatusCode(201);
     }
 
@@ -115,28 +102,45 @@ class StylistController extends Controller
 
     /**
      * Everything the "Services & hours" page needs for one professional: what
-     * they offer, their weekly hours, the studio's opening hours (which cap
-     * those hours) and the full service catalogue to pick from.
+     * they offer, the calendar dates they're available on, the studio's opening
+     * hours (which cap those hours) and the full service catalogue to pick from.
      */
     public function setup(Stylist $stylist)
     {
         return response()->json(['data' => $this->setupPayload($stylist)]);
     }
 
-    /** Replace the set of services this professional offers. */
+    /**
+     * Replace the set of services this professional offers — optionally with
+     * their own price / advance percentage per service (blank = the service's
+     * standard). Sending only `service_ids` leaves any terms already set alone.
+     */
     public function syncServices(SyncStylistServicesRequest $request, Stylist $stylist)
     {
-        $stylist->services()->sync($request->input('service_ids', []));
+        if ($request->has('services')) {
+            $stylist->services()->sync(
+                collect($request->input('services'))
+                    ->mapWithKeys(fn ($service) => [
+                        $service['id'] => [
+                            'price' => $service['price'] ?? null,
+                            'advance_percentage' => $service['advance_percentage'] ?? null,
+                        ],
+                    ])
+                    ->all()
+            );
+        } else {
+            $stylist->services()->sync($request->input('service_ids', []));
+        }
 
         return response()->json(['data' => $this->setupPayload($stylist)]);
     }
 
-    /** Replace this professional's weekly working hours. */
     /**
-     * Set hours for specific calendar dates: a day off, custom ranges, or back
-     * to the weekly pattern. Responds with the refreshed setup plus a list of
-     * dates where existing (pending/confirmed) appointments now fall outside
-     * the professional's hours — they are NOT cancelled, the admin is told.
+     * Set the hours a professional can be booked on specific calendar dates —
+     * `custom` gives the date its ranges, `clear` removes them (not available
+     * that day). Responds with the refreshed setup plus a list of dates where
+     * existing (pending/confirmed) appointments now fall outside the
+     * professional's hours — they are NOT cancelled, the admin is told.
      */
     public function updateDateHours(UpdateStylistDateHoursRequest $request, Stylist $stylist)
     {
@@ -146,9 +150,7 @@ class StylistController extends Controller
             foreach ($days as $day) {
                 $stylist->dateHours()->whereDate('date', $day['date'])->delete();
 
-                if ($day['mode'] === 'off') {
-                    $stylist->dateHours()->create(['date' => $day['date']]);
-                } elseif ($day['mode'] === 'custom') {
+                if ($day['mode'] === 'custom') {
                     foreach ($day['ranges'] as $range) {
                         $stylist->dateHours()->create([
                             'date' => $day['date'],
@@ -162,7 +164,7 @@ class StylistController extends Controller
 
         return response()->json([
             'data' => $this->setupPayload($stylist),
-            'warnings' => $this->appointmentsOutsideHours($stylist, collect($days)->where('mode', '!=', 'regular')->pluck('date')->all()),
+            'warnings' => $this->appointmentsOutsideHours($stylist, collect($days)->pluck('date')->all()),
         ]);
     }
 
@@ -208,37 +210,8 @@ class StylistController extends Controller
         return $warnings;
     }
 
-    public function updateWorkHours(UpdateStylistWorkHoursRequest $request, Stylist $stylist)
-    {
-        DB::transaction(fn () => self::replaceWorkHours($stylist, $request->input('days', [])));
-
-        return response()->json(['data' => $this->setupPayload($stylist)]);
-    }
-
-    /** Delete and re-insert a professional's weekly ranges from [{day_of_week, ranges: [{start, end}]}]. */
-    private static function replaceWorkHours(Stylist $stylist, array $days): void
-    {
-        $stylist->workHours()->delete();
-
-        $rows = [];
-        foreach ($days as $day) {
-            foreach ($day['ranges'] ?? [] as $range) {
-                $rows[] = [
-                    'day_of_week' => (int) $day['day_of_week'],
-                    'start_time' => $range['start'],
-                    'end_time' => $range['end'],
-                ];
-            }
-        }
-
-        if ($rows) {
-            $stylist->workHours()->createMany($rows);
-        }
-    }
-
     private function setupPayload(Stylist $stylist): array
     {
-        $stylist->unsetRelation('workHours')->load('workHours');
         $bounds = BookingAvailability::shopBounds();
 
         return [
@@ -250,8 +223,10 @@ class StylistController extends Controller
                 'status' => $stylist->status,
             ],
             'service_ids' => $stylist->services()->pluck('services.id')->values()->all(),
-            'work_hours' => StylistWorkHour::weekly($stylist->workHours),
-            // Calendar dates that override the weekly pattern (today onwards).
+            // Their own price / advance % per service (only where set; the rest use the standard).
+            'service_terms' => $stylist->unsetRelation('services')->load('services')->serviceTerms(),
+            // The dates they can be booked on (today onwards) and the hours for each. Nothing
+            // is set by default: a date that isn't listed is a date they're not available.
             'date_hours' => StylistDateHour::byDate(
                 $stylist->dateHours()
                     ->whereDate('date', '>=', Carbon::now(BookingAvailability::TZ)->toDateString())
@@ -277,6 +252,7 @@ class StylistController extends Controller
                         'name' => $service->name,
                         'duration_minutes' => $service->duration_minutes,
                         'price' => $service->price !== null ? (float) $service->price : null,
+                        'advance_percentage' => (int) $service->advance_percentage,
                         'status' => $service->status,
                     ])->values()->all(),
                 ])

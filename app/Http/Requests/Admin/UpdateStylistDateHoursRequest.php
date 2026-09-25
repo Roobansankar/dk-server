@@ -13,6 +13,9 @@ class UpdateStylistDateHoursRequest extends FormRequest
     /** How far ahead the calendar can be edited. */
     public const MAX_DAYS_AHEAD = 400;
 
+    /** Ranges allowed in one day — enough for a split shift, not a free-for-all. */
+    public const MAX_RANGES_PER_DAY = 4;
+
     public function authorize(): bool
     {
         return $this->user()->can('stylists.manage');
@@ -21,13 +24,13 @@ class UpdateStylistDateHoursRequest extends FormRequest
     public function rules(): array
     {
         return [
-            // Each entry sets ONE calendar date: `off` (day off), `custom` (the
-            // given ranges replace the weekly hours that day) or `regular`
-            // (remove any override so the weekly pattern applies again).
+            // Each entry sets ONE calendar date: `custom` (the professional can
+            // be booked that day, within the given ranges) or `clear` (remove the
+            // hours — not available that day). Dates not sent are left as they are.
             'days' => ['required', 'array', 'min:1', 'max:366'],
             'days.*.date' => ['required', 'date_format:Y-m-d', 'distinct'],
-            'days.*.mode' => ['required', 'in:regular,off,custom'],
-            'days.*.ranges' => ['nullable', 'array', 'max:'.UpdateStylistWorkHoursRequest::MAX_RANGES_PER_DAY],
+            'days.*.mode' => ['required', 'in:custom,clear'],
+            'days.*.ranges' => ['nullable', 'array', 'max:'.self::MAX_RANGES_PER_DAY],
             'days.*.ranges.*.start' => ['required', 'date_format:H:i'],
             'days.*.ranges.*.end' => ['required', 'date_format:H:i'],
         ];

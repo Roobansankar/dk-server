@@ -7,8 +7,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Collection;
 
 /**
- * Working hours for ONE specific date, overriding the weekly pattern (see the
- * migration for the row conventions: times = custom range, NULL times = day off).
+ * One bookable range on one calendar date for a professional. Several rows on
+ * the same date make a split shift; a date with no rows is a date they are not
+ * available — nothing is bookable unless an admin has set it on the calendar.
  */
 class StylistDateHour extends Model
 {
@@ -31,28 +32,22 @@ class StylistDateHour extends Model
         return $this->belongsTo(Stylist::class);
     }
 
-    /** A "day off" row carries no times. */
-    public function isOff(): bool
+    /** "10:00:00" → "10:00". */
+    public function start(): string
     {
-        return $this->start_time === null || $this->end_time === null;
+        return substr((string) $this->start_time, 0, 5);
     }
 
-    public function start(): ?string
+    public function end(): string
     {
-        return $this->start_time === null ? null : substr((string) $this->start_time, 0, 5);
-    }
-
-    public function end(): ?string
-    {
-        return $this->end_time === null ? null : substr((string) $this->end_time, 0, 5);
+        return substr((string) $this->end_time, 0, 5);
     }
 
     /**
      * Group rows by date into the shape the API and the admin calendar share:
-     * `{ "2026-10-05": [], "2026-10-06": [{start, end}, …] }` — an empty list
-     * means the professional is off that day, a missing date means "weekly
-     * pattern applies". Returned as an object so an empty map serialises as
-     * `{}` rather than `[]`.
+     * `{ "2026-10-06": [{start, end}, …] }`. A date that is not listed is a
+     * date the professional isn't available. Returned as an object so an empty
+     * map serialises as `{}` rather than `[]`.
      *
      * @param  Collection<int, StylistDateHour>  $rows
      */
@@ -60,13 +55,8 @@ class StylistDateHour extends Model
     {
         $map = [];
 
-        foreach ($rows->sortBy(fn (self $r) => [$r->date->toDateString(), $r->start() ?? '']) as $row) {
-            $key = $row->date->toDateString();
-            $map[$key] ??= [];
-
-            if (! $row->isOff()) {
-                $map[$key][] = ['start' => $row->start(), 'end' => $row->end()];
-            }
+        foreach ($rows->sortBy(fn (self $r) => [$r->date->toDateString(), $r->start()]) as $row) {
+            $map[$row->date->toDateString()][] = ['start' => $row->start(), 'end' => $row->end()];
         }
 
         return (object) $map;

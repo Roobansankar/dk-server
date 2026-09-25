@@ -17,9 +17,10 @@ use Tests\TestCase;
 
 /**
  * Per-professional booking: a professional only takes services they offer,
- * only inside their own weekly hours, and "any professional" resolves to a
- * real, free, eligible person. The public slot list and the appointment
- * endpoint are checked against the same rules.
+ * only inside the hours set for them on that calendar date (a date nobody set
+ * is not bookable), and "any professional" resolves to a real, free, eligible
+ * person. The public slot list and the appointment endpoint are checked
+ * against the same rules.
  */
 class BookingAvailabilityTest extends TestCase
 {
@@ -62,15 +63,14 @@ class BookingAvailabilityTest extends TestCase
         return Service::factory()->forCategory($category)->create(['duration_minutes' => $minutes, 'price' => 1000, 'advance_percentage' => 0]);
     }
 
-    /** A professional who offers $services and works only Mondays, in the given ranges. */
+    /** A professional who offers $services and has hours set only on $this->monday, in the given ranges. */
     private function mondayStylist(array $ranges, Service ...$services): Stylist
     {
         $stylist = Stylist::factory()->create();
         $stylist->services()->attach(collect($services)->pluck('id')->all());
-        $stylist->workHours()->delete();
 
         foreach ($ranges as [$start, $end]) {
-            $stylist->workHours()->create(['day_of_week' => 1, 'start_time' => $start, 'end_time' => $end]);
+            $stylist->dateHours()->create(['date' => $this->monday, 'start_time' => $start, 'end_time' => $end]);
         }
 
         return $stylist;
@@ -108,7 +108,7 @@ class BookingAvailabilityTest extends TestCase
 
     // --- The public roster carries what each professional does ---------------
 
-    public function test_the_public_roster_lists_each_professionals_services_and_weekly_hours(): void
+    public function test_the_public_roster_lists_each_professionals_services_and_dates(): void
     {
         $offered = $this->service();
         $hidden = Service::factory()->forCategory(ServiceCategory::factory()->female()->create())->inactive()->create();
@@ -117,15 +117,43 @@ class BookingAvailabilityTest extends TestCase
 
         $rows = collect($this->getJson('/api/stylists')->assertOk()->json('data'))->keyBy('id');
 
-        // only ACTIVE services count, and Monday (index 1) holds the two ranges
+        // only ACTIVE services count, and only the date that was set is listed
         $this->assertSame([$offered->id], $rows[$ready->id]['service_ids']);
         $this->assertSame(
-            [['start' => '10:00', 'end' => '13:00'], ['start' => '14:00', 'end' => '18:00']],
-            $rows[$ready->id]['work_hours'][1],
+            [$this->monday => [['start' => '10:00', 'end' => '13:00'], ['start' => '14:00', 'end' => '18:00']]],
+            $rows[$ready->id]['date_hours'],
         );
-        $this->assertSame([], $rows[$ready->id]['work_hours'][2]);
+        $this->assertArrayNotHasKey('work_hours', $rows[$ready->id]);
         $this->assertTrue($rows[$ready->id]['bookable']);
         $this->assertFalse($rows[$bare->id]['bookable']);
+    }
+
+    public function test_a_professional_with_services_but_no_dates_is_not_bookable(): void
+    {
+        $service = $this->service(60);
+        $stylist = Stylist::factory()->create();
+        $stylist->services()->attach($service->id);
+
+        $row = collect($this->getJson('/api/stylists')->assertOk()->json('data'))->firstWhere('id', $stylist->id);
+
+        $this->assertFalse($row['bookable']);
+        $this->assertSame([], $row['date_hours']);
+        $this->assertSame([], $this->availableStarts($this->slots($service, $this->monday, $stylist)));
+        $this->assertSame([], $this->availableStarts($this->slots($service, $this->monday)));
+        $this->book($service, $this->monday, '11:00', $stylist)->assertStatus(422)->assertJsonValidationErrors('appointment_time');
+    }
+
+    public function test_a_past_date_that_still_has_hours_is_not_bookable_or_counted(): void
+    {
+        $service = $this->service(60);
+        $stylist = Stylist::factory()->create();
+        $stylist->services()->attach($service->id);
+        $stylist->dateHours()->create(['date' => Carbon::now('Asia/Kolkata')->subDays(3)->toDateString(), 'start_time' => '10:00', 'end_time' => '13:00']);
+
+        $row = collect($this->getJson('/api/stylists')->assertOk()->json('data'))->firstWhere('id', $stylist->id);
+
+        $this->assertFalse($row['bookable']);
+        $this->assertSame([], $row['date_hours']);
     }
 
     // --- Slot list ---------------------------------------------------------
