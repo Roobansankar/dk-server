@@ -28,11 +28,12 @@ class StoreOfflineAppointmentRequest extends FormRequest
             'gender' => ['required', 'string', Rule::in(['male', 'female', 'unisex'])],
             'category_id' => ['required', 'integer', Rule::exists('service_categories', 'id')->where('status', true)],
             'service_id' => ['required', 'integer', Rule::exists('services', 'id')->where('status', true)],
-            'stylist_id' => ['nullable', 'integer', Rule::exists('stylists', 'id')->where('status', true)],
+            'stylist_id' => ['required', 'integer', Rule::exists('stylists', 'id')->where('status', true)],
             // Staff may backdate a walk-in that already happened.
             'appointment_date' => ['required', 'date'],
             'appointment_time' => ['required', 'date_format:H:i'],
             'payment_status' => ['sometimes', Rule::in(Appointment::PAYMENT_STATUSES)],
+            'payment_method' => ['nullable', 'string', Rule::in(Appointment::PAYMENT_METHODS)],
             'status' => ['sometimes', Rule::in(Appointment::STATUSES)],
             'message' => ['nullable', 'string', 'max:1000'],
             'notes' => ['nullable', 'string', 'max:2000'],

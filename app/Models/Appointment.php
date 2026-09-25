@@ -41,6 +41,8 @@ class Appointment extends Model
         self::PAYMENT_PAID,
     ];
 
+    public const PAYMENT_METHODS = ['upi', 'cash', 'card'];
+
     public const SOURCE_ONLINE = 'online';
 
     public const SOURCE_OFFLINE = 'offline';
@@ -70,6 +72,7 @@ class Appointment extends Model
         'notes',
         'status',
         'payment_status',
+        'payment_method',
     ];
 
     protected function casts(): array

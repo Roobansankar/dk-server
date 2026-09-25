@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Models\Appointment;
 use App\Support\AppointmentSlots;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -31,6 +32,11 @@ class AppointmentResource extends JsonResource
             'amount_received' => round($this->amount_received, 2),
             'remaining_amount' => $this->remaining_amount,
             'payment_status' => $this->payment_status,
+            // offline (staff-recorded) payments only, admin-only
+            'payment_method' => $this->when(
+                $this->source === Appointment::SOURCE_OFFLINE && $request->user()?->can('appointments.view'),
+                $this->payment_method,
+            ),
             'appointment_date' => $this->appointment_date?->toDateString(),
             'appointment_time' => $this->appointment_time
                 ? Carbon::parse($this->appointment_time)->format('H:i')

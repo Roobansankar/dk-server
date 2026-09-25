@@ -98,6 +98,7 @@ class AppointmentController extends Controller
                 'notes' => $request->input('notes'),
                 'status' => $status,
                 'payment_status' => $request->input('payment_status', Appointment::PAYMENT_UNPAID),
+                'payment_method' => $request->input('payment_method'),
             ]);
             $appointment->applyServiceSnapshot($service);
             $appointment->applyStylistSnapshot($stylist);
