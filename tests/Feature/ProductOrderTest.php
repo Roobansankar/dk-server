@@ -911,7 +911,7 @@ $this->combo = Combo::create([
         )->assertForbidden();
     }
 
-    public function test_product_tax_is_added_to_the_server_calculated_price(): void
+    public function test_product_tax_is_inside_the_selling_price_not_added_on_top(): void
     {
         $this->actingAsToken($this->customer());
 
@@ -926,14 +926,73 @@ $this->combo = Combo::create([
             ->assertCreated()
             ->json('data');
 
-        // ₹1,000 + 5% tax (₹50) = ₹1,050.
-        $this->assertSame(105000, $data['amount']);
-        $this->assertSame(1050.0, (float) $data['total']);
-        $this->assertSame(1050.0, (float) $data['items'][0]['unit_price']);
-        $this->assertSame(1050.0, (float) $data['items'][0]['line_total']);
+        // The ₹1,000 selling price is what is charged — its 5% tax is already in it.
+        $this->assertSame(100000, $data['amount']);
+        $this->assertSame(1000.0, (float) $data['total']);
+        $this->assertSame(1000.0, (float) $data['items'][0]['unit_price']);
+        $this->assertSame(1000.0, (float) $data['items'][0]['line_total']);
     }
 
-    public function test_partial_combo_tax_is_added_to_the_selected_combo_price(): void
+    public function test_a_products_tax_percent_does_not_change_what_is_charged(): void
+    {
+        $this->actingAsToken($this->customer());
+
+        $charged = [];
+
+        foreach ([0, 5, 18, 100] as $percent) {
+            $this->p1->update(['selling_price' => 1180, 'tax_percent' => $percent]);
+
+            $charged[$percent] = $this->checkout([$this->productItem($this->p1, 3)])
+                ->assertCreated()
+                ->json('data.amount');
+        }
+
+        // 3 × ₹1,180, whatever the tax rate.
+        $this->assertSame([0 => 354000, 5 => 354000, 18 => 354000, 100 => 354000], $charged);
+    }
+
+    public function test_products_and_combos_with_tax_are_charged_their_listed_prices_in_one_basket(): void
+    {
+        $this->actingAsToken($this->customer());
+
+        $this->p2->update(['selling_price' => 1000, 'tax_percent' => 5]);
+        $this->combo->update(['tax_percent' => 5, 'bundle_price' => 1400]);
+
+        $data = $this->checkout([
+            $this->productItem($this->p2, 2),
+            $this->comboItem([$this->p1->id, $this->p2->id, $this->p3->id]),
+        ])
+            ->assertCreated()
+            ->json('data');
+
+        // Product: 2 × ₹1,000. Combo: ₹1,400. The 5% tax is inside both prices.
+        $this->assertSame(1000.0, (float) $data['items'][0]['unit_price']);
+        $this->assertSame(2000.0, (float) $data['items'][0]['line_total']);
+        $this->assertSame(1400.0, (float) $data['items'][1]['unit_price']);
+        $this->assertSame(340000, $data['amount']);
+    }
+
+    public function test_a_combos_tax_percent_does_not_change_what_is_charged(): void
+    {
+        $this->actingAsToken($this->customer());
+
+        $charged = [];
+
+        foreach ([0, 5, 18, 100] as $percent) {
+            $this->combo->update(['tax_percent' => $percent, 'bundle_price' => 1400]);
+
+            $charged[$percent] = $this->checkout([
+                $this->comboItem([$this->p1->id, $this->p2->id, $this->p3->id], 2),
+            ])
+                ->assertCreated()
+                ->json('data.amount');
+        }
+
+        // 2 × the ₹1,400 bundle, whatever the tax rate.
+        $this->assertSame([0 => 280000, 5 => 280000, 18 => 280000, 100 => 280000], $charged);
+    }
+
+    public function test_partial_combo_tax_is_inside_the_selected_combo_price(): void
     {
         $this->actingAsToken($this->customer());
 
@@ -950,15 +1009,14 @@ $this->combo = Combo::create([
             ->assertCreated()
             ->json('data');
 
-        // ₹500 + ₹450 = ₹950.
-        // ₹950 + 5% tax (₹47.50) = ₹997.50.
-        $this->assertSame(99750, $data['amount']);
-        $this->assertSame(997.50, (float) $data['total']);
-        $this->assertSame(997.50, (float) $data['items'][0]['unit_price']);
-        $this->assertSame(997.50, (float) $data['items'][0]['line_total']);
+        // ₹500 + ₹450 = ₹950 — the 5% tax is already inside it, nothing is added.
+        $this->assertSame(95000, $data['amount']);
+        $this->assertSame(950.0, (float) $data['total']);
+        $this->assertSame(950.0, (float) $data['items'][0]['unit_price']);
+        $this->assertSame(950.0, (float) $data['items'][0]['line_total']);
     }
 
-    public function test_complete_combo_bundle_price_gets_the_combo_tax(): void
+    public function test_complete_combo_bundle_price_includes_the_combo_tax(): void
     {
         $this->actingAsToken($this->customer());
 
@@ -977,11 +1035,10 @@ $this->combo = Combo::create([
             ->assertCreated()
             ->json('data');
 
-        // Complete selection uses the ₹1,400 bundle price.
-        // ₹1,400 + 5% tax (₹70) = ₹1,470.
-        $this->assertSame(147000, $data['amount']);
-        $this->assertSame(1470.0, (float) $data['total']);
-        $this->assertSame(1470.0, (float) $data['items'][0]['unit_price']);
-        $this->assertSame(1470.0, (float) $data['items'][0]['line_total']);
+        // Complete selection uses the ₹1,400 bundle price, 5% tax included in it.
+        $this->assertSame(140000, $data['amount']);
+        $this->assertSame(1400.0, (float) $data['total']);
+        $this->assertSame(1400.0, (float) $data['items'][0]['unit_price']);
+        $this->assertSame(1400.0, (float) $data['items'][0]['line_total']);
     }
 }

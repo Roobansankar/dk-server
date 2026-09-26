@@ -110,11 +110,10 @@ class OrderPricing
             );
         }
 
-        $basePaise = self::toPaise($product->selling_price);
-        $unitPaise = self::addTax(
-            $basePaise,
-            (float) $product->tax_percent
-        );
+        // A product's selling price is what the customer pays: its tax_percent
+        // is the tax already INSIDE that price, so nothing is added on top
+        // (₹1,000 at 5% is charged as ₹1,000, of which ₹47.62 is tax).
+        $unitPaise = self::toPaise($product->selling_price);
 
         return [
             'product_id' => $product->id,
@@ -224,10 +223,10 @@ class OrderPricing
             $baseUnitPaise = self::toPaise($combo->bundle_price);
         }
 
-        $unitPaise = self::addTax(
-            $baseUnitPaise,
-            (float) $combo->tax_percent
-        );
+        // As with products, the price is what the customer pays: the combo's
+        // tax_percent is the tax already INSIDE the bundle / selected prices,
+        // so nothing is added on top.
+        $unitPaise = $baseUnitPaise;
 
         return [
             'product_id' => null,
@@ -299,22 +298,6 @@ class OrderPricing
                 );
             }
         }
-    }
-
-    /**
-     * Add a percentage tax to a base amount in paise.
-     */
-    private static function addTax(
-        int $basePaise,
-        float $taxPercent
-    ): int {
-        if ($basePaise <= 0 || $taxPercent <= 0) {
-            return $basePaise;
-        }
-
-        return $basePaise + (int) round(
-            $basePaise * ($taxPercent / 100)
-        );
     }
 
     private static function toPaise(string|int|float $amount): int
