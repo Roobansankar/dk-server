@@ -45,6 +45,6 @@ class ProductFactory extends Factory
 
     public function featured(): static
     {
-        return $this->state(fn () => ['is_featured' => true]);
+        return $this->state(fn () => ['is_featured' => true, 'featured_at' => now()]);
     }
 }

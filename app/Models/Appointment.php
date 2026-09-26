@@ -73,6 +73,7 @@ class Appointment extends Model
         'status',
         'payment_status',
         'payment_method',
+        'balance_payment_method',
     ];
 
     protected function casts(): array

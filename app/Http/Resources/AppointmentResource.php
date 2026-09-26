@@ -37,6 +37,12 @@ class AppointmentResource extends JsonResource
                 $this->source === Appointment::SOURCE_OFFLINE && $request->user()?->can('appointments.view'),
                 $this->payment_method,
             ),
+            // online bookings only: how the balance was paid at the salon
+            // (the advance is the Razorpay payment), admin-only
+            'balance_payment_method' => $this->when(
+                $this->source !== Appointment::SOURCE_OFFLINE && $request->user()?->can('appointments.view'),
+                $this->balance_payment_method,
+            ),
             'appointment_date' => $this->appointment_date?->toDateString(),
             'appointment_time' => $this->appointment_time
                 ? Carbon::parse($this->appointment_time)->format('H:i')

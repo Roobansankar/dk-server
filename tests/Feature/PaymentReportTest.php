@@ -68,7 +68,7 @@ class PaymentReportTest extends TestCase
             ->assertJsonCount(1, 'data');
     }
 
-    public function test_export_returns_a_pdf(): void
+    public function test_export_returns_an_excel_workbook(): void
     {
         $this->actingAsToken($this->superadmin());
         $this->completedAppointment();
@@ -78,8 +78,36 @@ class PaymentReportTest extends TestCase
         ]);
 
         $response->assertOk();
-        $this->assertSame('application/pdf', $response->headers->get('content-type'));
+        $this->assertSame(
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            $response->headers->get('content-type'),
+        );
+        $this->assertStringContainsString('.xlsx', (string) $response->headers->get('content-disposition'));
         $this->assertStringContainsString('attachment', (string) $response->headers->get('content-disposition'));
+    }
+
+    public function test_excel_export_respects_the_report_filters(): void
+    {
+        $this->actingAsToken($this->superadmin());
+        $this->completedAppointment(['appointment_date' => '2026-01-05', 'customer_name' => 'January Guest']);
+        $this->completedAppointment(['appointment_date' => '2026-06-20', 'customer_name' => 'June Guest']);
+
+        $response = $this->get('/api/admin/payments/export?date_from=2026-06-01&date_to=2026-06-30')->assertOk();
+
+        $reader = new \OpenSpout\Reader\XLSX\Reader;
+        $reader->open($response->baseResponse->getFile()->getPathname());
+        $rows = [];
+        foreach ($reader->getSheetIterator() as $sheet) {
+            foreach ($sheet->getRowIterator() as $row) {
+                $rows[] = $row->toArray();
+            }
+        }
+        $reader->close();
+
+        $this->assertSame('Reference', $rows[0][0]);
+        $this->assertCount(3, $rows); // header + 1 filtered row + totals
+        $this->assertSame('June Guest', $rows[1][2]);
+        $this->assertStringStartsWith('Totals', $rows[2][0]);
     }
 
     public function test_payment_endpoints_require_the_right_permissions(): void
