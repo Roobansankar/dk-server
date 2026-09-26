@@ -5,11 +5,11 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\AppointmentResource;
 use App\Models\Appointment;
-use App\Models\SiteSetting;
 use App\Support\AppointmentFilters;
-use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use OpenSpout\Common\Entity\Row;
+use OpenSpout\Writer\XLSX\Writer;
 
 class PaymentReportController extends Controller
 {
@@ -32,6 +32,10 @@ class PaymentReportController extends Controller
             ->additional(['summary' => $this->summary($rows)]);
     }
 
+    /**
+     * Download the current (filtered) payment report as an .xlsx workbook —
+     * same OpenSpout writer + download response as the appointment export.
+     */
     public function export(Request $request)
     {
         $request->validate(AppointmentFilters::rules());
@@ -40,20 +44,42 @@ class PaymentReportController extends Controller
             ->orderBy('appointment_date')
             ->orderBy('appointment_time')
             ->get();
+        $summary = $this->summary($rows);
 
-        $pdf = Pdf::loadView('pdf.payment-report', [
-            'rows' => $rows,
-            'summary' => $this->summary($rows),
-            'filters' => AppointmentFilters::describe($request),
-            'salonName' => SiteSetting::allValues()->get('salon_name', 'DK StyleHub'),
-            'generatedAt' => now(),
-            'dateFrom' => $request->input('date_from'),
-            'dateTo' => $request->input('date_to'),
-        ])->setPaper('a4');
+        $path = tempnam(sys_get_temp_dir(), 'payments_').'.xlsx';
+        $writer = new Writer;
+        $writer->openToFile($path);
+        $writer->addRow(Row::fromValues([
+            'Reference', 'Date', 'Customer', 'Phone', 'Service', 'Category', 'Gender',
+            'Price', 'Advance %', 'Advance', 'Remaining', 'Payment Status',
+        ]));
 
-        $name = 'dk-stylehub-payments-'.now()->format('Y-m-d').'.pdf';
+        foreach ($rows as $r) {
+            $writer->addRow(Row::fromValues([
+                (string) $r->reference,
+                optional($r->appointment_date)->toDateString() ?? '',
+                (string) $r->customer_name,
+                (string) $r->phone,
+                (string) $r->service_name,
+                (string) $r->category_name,
+                ucfirst((string) $r->gender),
+                (float) ($r->service_price ?? 0),
+                (int) ($r->advance_percentage ?? 0),
+                (float) ($r->advance_amount ?? 0),
+                (float) $r->remaining_amount,
+                ucwords(str_replace('_', ' ', (string) $r->payment_status)),
+            ]));
+        }
 
-        return $pdf->download($name);
+        $writer->addRow(Row::fromValues([
+            'Totals ('.$summary['completed_appointments'].' completed)', '', '', '', '', '', '',
+            $summary['total_service_value'], '', $summary['total_advance_received'], $summary['total_remaining'], '',
+        ]));
+        $writer->close();
+
+        return response()->download($path, 'dk-stylehub-payments-'.now()->format('Y-m-d').'.xlsx', [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ])->deleteFileAfterSend();
     }
 
     /** @param  Collection<int, Appointment>  $rows */

@@ -23,6 +23,11 @@ class UpdateAppointmentRequest extends FormRequest
                 Rule::prohibitedIf($this->route('appointment')?->source !== Appointment::SOURCE_OFFLINE),
                 'sometimes', 'nullable', 'string', Rule::in(Appointment::PAYMENT_METHODS),
             ],
+            // Online bookings: the method used for the balance paid at the salon.
+            'balance_payment_method' => [
+                Rule::prohibitedIf($this->route('appointment')?->source === Appointment::SOURCE_OFFLINE),
+                'sometimes', 'nullable', 'string', Rule::in(Appointment::PAYMENT_METHODS),
+            ],
             'notes' => ['sometimes', 'nullable', 'string', 'max:2000'],
             'appointment_date' => ['sometimes', 'required', 'date'],
             'appointment_time' => ['sometimes', 'required', 'date_format:H:i'],
