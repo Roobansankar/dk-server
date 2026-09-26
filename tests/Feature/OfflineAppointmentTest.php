@@ -125,6 +125,27 @@ class OfflineAppointmentTest extends TestCase
         $this->assertNull($online->fresh()->payment_method);
     }
 
+    public function test_offline_appointment_accepts_unpaid_payment_status(): void
+    {
+        $this->actingAsToken($this->superadmin());
+
+        $id = $this->postJson('/api/admin/appointments', $this->payload(['payment_status' => 'unpaid']))
+            ->assertCreated()
+            ->assertJsonPath('data.payment_status', 'unpaid')
+            ->assertJsonPath('data.payment_method', null)
+            ->json('data.id');
+
+        // Customer later pays directly at the salon.
+        $this->patchJson("/api/admin/appointments/{$id}", ['payment_status' => 'paid', 'payment_method' => 'upi'])
+            ->assertOk()
+            ->assertJsonPath('data.payment_status', 'paid')
+            ->assertJsonPath('data.payment_method', 'upi');
+
+        $this->patchJson("/api/admin/appointments/{$id}", ['payment_status' => 'unpaid'])
+            ->assertOk()
+            ->assertJsonPath('data.payment_status', 'unpaid');
+    }
+
     public function test_offline_appointment_requires_a_stylist(): void
     {
         $this->actingAsToken($this->superadmin());

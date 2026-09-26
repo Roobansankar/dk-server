@@ -12,6 +12,9 @@ class Product extends Model
 {
     use HasFactory, SoftDeletes;
 
+    /** How many products may be featured at once. */
+    public const MAX_FEATURED = 3;
+
     protected $fillable = [
         'name',
         'slug',
@@ -35,6 +38,7 @@ class Product extends Model
             'gst_inclusive' => 'boolean',
             'status' => 'boolean',
             'is_featured' => 'boolean',
+            'featured_at' => 'datetime',
             'sort_order' => 'integer',
         ];
     }
@@ -65,31 +69,47 @@ class Product extends Model
     }
 
     /**
-     * Set this product's featured flag, enforcing the "exactly one featured
-     * product at a time" rule at the database level.
+     * Set this product's featured flag, enforcing the "at most MAX_FEATURED
+     * featured products" rule at the database level.
      *
      * The whole thing runs in one transaction with `SELECT ... FOR UPDATE` on
      * every row that is currently featured (plus this one), so two admins
      * toggling featured at the same moment are serialised and can never leave
-     * more than one product featured. Turning a product OFF simply clears it and
-     * leaves nothing featured, which is the intended behaviour.
+     * more than MAX_FEATURED products featured. Featuring one more than the
+     * limit un-features the one featured longest ago (oldest `featured_at`).
+     * Turning a product OFF simply clears it.
      */
     public function applyFeatured(bool $featured): void
     {
         DB::transaction(function () use ($featured) {
-            static::query()
+            $locked = static::query()
                 ->where(fn ($q) => $q->where('is_featured', true)->orWhereKey($this->getKey()))
                 ->lockForUpdate()
                 ->get();
 
-            if ($featured) {
-                static::query()
+            $alreadyFeatured = (bool) $locked->firstWhere('id', $this->getKey())?->is_featured;
+
+            if ($featured && ! $alreadyFeatured) {
+                $others = static::query()
                     ->where('is_featured', true)
                     ->whereKeyNot($this->getKey())
-                    ->update(['is_featured' => false]);
+                    ->orderBy('featured_at')
+                    ->orderBy('id')
+                    ->pluck('id');
+
+                $excess = $others->count() - (self::MAX_FEATURED - 1);
+
+                if ($excess > 0) {
+                    static::query()
+                        ->whereKey($others->take($excess)->all())
+                        ->update(['is_featured' => false, 'featured_at' => null]);
+                }
             }
 
-            $this->forceFill(['is_featured' => $featured])->save();
+            $this->forceFill([
+                'is_featured' => $featured,
+                'featured_at' => $featured ? ($alreadyFeatured ? $this->featured_at : now()) : null,
+            ])->save();
         });
 
         $this->refresh();

@@ -142,37 +142,44 @@ class ProductTest extends TestCase
         $this->assertFalse(Product::first()->is_featured);
     }
 
-    public function test_featuring_one_product_unfeatures_the_previous_one(): void
+    public function test_up_to_three_products_can_be_featured_and_a_fourth_unfeatures_the_oldest(): void
     {
         $this->actingAsToken($this->superadmin());
-        $a = Product::factory()->create();
-        $b = Product::factory()->create();
+        [$a, $b, $c, $d] = Product::factory()->count(4)->create()->all();
 
-        // Feature A.
-        $this->putJson("/api/admin/products/{$a->id}", ['is_featured' => true])
-            ->assertOk()
-            ->assertJsonPath('data.is_featured', true);
-        $this->assertTrue($a->fresh()->is_featured);
-        $this->assertFalse($b->fresh()->is_featured);
+        // Feature A, B, C (a second apart so the order is unambiguous).
+        foreach ([$a, $b, $c] as $i => $product) {
+            $this->travel($i)->seconds();
+            $this->putJson("/api/admin/products/{$product->id}", ['is_featured' => true])
+                ->assertOk()
+                ->assertJsonPath('data.is_featured', true);
+        }
+        $this->assertSame(3, Product::where('is_featured', true)->count());
 
-        // Feature B -> A must flip off automatically.
-        $this->putJson("/api/admin/products/{$b->id}", ['is_featured' => true])
+        // Re-saving an already-featured product keeps its place in the order.
+        $this->travel(5)->seconds();
+        $this->putJson("/api/admin/products/{$a->id}", ['is_featured' => true])->assertOk();
+        $this->assertSame(3, Product::where('is_featured', true)->count());
+
+        // Featuring a 4th drops the oldest-featured (A), never more than 3.
+        $this->putJson("/api/admin/products/{$d->id}", ['is_featured' => true])
             ->assertOk()
             ->assertJsonPath('data.is_featured', true);
         $this->assertFalse($a->fresh()->is_featured);
+        $this->assertNull($a->fresh()->featured_at);
         $this->assertTrue($b->fresh()->is_featured);
+        $this->assertTrue($c->fresh()->is_featured);
+        $this->assertTrue($d->fresh()->is_featured);
+        $this->assertSame(3, Product::where('is_featured', true)->count());
 
-        // Exactly one featured product, always.
-        $this->assertSame(1, Product::where('is_featured', true)->count());
-
-        // Unfeature B -> nothing featured.
+        // Unfeature B -> two left.
         $this->putJson("/api/admin/products/{$b->id}", ['is_featured' => false])
             ->assertOk()
             ->assertJsonPath('data.is_featured', false);
-        $this->assertSame(0, Product::where('is_featured', true)->count());
+        $this->assertSame(2, Product::where('is_featured', true)->count());
     }
 
-    public function test_creating_a_product_as_featured_unfeatures_the_previous_one(): void
+    public function test_creating_a_featured_product_keeps_existing_featured_ones_below_the_limit(): void
     {
         $this->actingAsToken($this->superadmin());
         $existing = Product::factory()->featured()->create();
@@ -181,11 +188,26 @@ class ProductTest extends TestCase
             ->assertCreated()
             ->assertJsonPath('data.is_featured', true);
 
-        $this->assertFalse($existing->fresh()->is_featured);
-        $this->assertSame(1, Product::where('is_featured', true)->count());
+        $this->assertTrue($existing->fresh()->is_featured);
+        $this->assertSame(2, Product::where('is_featured', true)->count());
     }
 
-    public function test_updating_a_featured_product_keeps_it_featured_and_unique(): void
+    public function test_creating_a_fourth_featured_product_unfeatures_the_oldest(): void
+    {
+        $this->actingAsToken($this->superadmin());
+        $oldest = Product::factory()->featured()->create(['featured_at' => now()->subDays(3)]);
+        Product::factory()->featured()->create(['featured_at' => now()->subDays(2)]);
+        Product::factory()->featured()->create(['featured_at' => now()->subDay()]);
+
+        $this->postJson('/api/admin/products', $this->payload(['is_featured' => true]))
+            ->assertCreated()
+            ->assertJsonPath('data.is_featured', true);
+
+        $this->assertFalse($oldest->fresh()->is_featured);
+        $this->assertSame(3, Product::where('is_featured', true)->count());
+    }
+
+    public function test_updating_a_featured_product_keeps_it_featured(): void
     {
         $this->actingAsToken($this->superadmin());
         $featured = Product::factory()->featured()->create(['mrp' => 800, 'selling_price' => 700]);

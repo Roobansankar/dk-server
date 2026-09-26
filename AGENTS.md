@@ -24,8 +24,8 @@ Laravel 13 REST API for the DK StyleHub salon site. See `README.md` for setup.
 - **Appointment list filters:** shared via `App\Support\AppointmentFilters` —
   used by the admin appointment list, history view and the payment report.
 - **Payments report:** `payments.view` / `payments.export` permissions.
-  `PaymentReportController` (completed appointments + totals + a DomPDF report
-  at `resources/views/pdf/payment-report.blade.php`).
+  `PaymentReportController` (completed appointments + totals + an .xlsx
+  export written with OpenSpout).
 - **Seeders:** `DatabaseSeeder` runs production-safe seeders always; `DevSeeder`
   (fake salon data) only when `! app()->isProduction()`.
 
