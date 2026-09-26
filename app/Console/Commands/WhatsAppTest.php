@@ -38,7 +38,7 @@ class WhatsAppTest extends Command
             'Test Guest',
             'Haircut',
             now()->toDateString(),
-            '10:00 AM',
+            '10:00 AM to 11:00 AM',
             number_format(199.00, 2),
             'APT-TEST123',
         ]);

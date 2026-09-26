@@ -12,7 +12,7 @@ class ComboController extends Controller
     public function index()
     {
         return ComboResource::collection(
-            Combo::query()->active()->with('items.product')->ordered()->get()
+            Combo::query()->active()->with(['items.product', 'images'])->ordered()->get()
         );
     }
 }

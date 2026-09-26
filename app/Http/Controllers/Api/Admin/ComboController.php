@@ -7,7 +7,7 @@ use App\Http\Requests\Admin\StoreComboRequest;
 use App\Http\Requests\Admin\UpdateComboRequest;
 use App\Http\Resources\ComboResource;
 use App\Models\Combo;
-use App\Support\ImageUploader;
+use App\Support\GalleryImages;
 use App\Support\Slug;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -17,7 +17,7 @@ class ComboController extends Controller
     public function index(Request $request)
     {
         $combos = Combo::query()
-            ->with('items.product')
+            ->with(['items.product', 'images'])
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->boolean('status')))
             ->when($request->filled('search'), fn ($q) => $q->where('name', 'like', '%'.$request->string('search').'%'))
             ->ordered()
@@ -28,12 +28,8 @@ class ComboController extends Controller
 
     public function store(StoreComboRequest $request)
     {
-        $data = $request->safe()->except(['image', 'items']);
+        $data = $request->safe()->except(['image', 'images', 'image_order', 'items']);
         $data['slug'] = Slug::unique(Combo::class, $request->string('name'));
-
-        if ($request->hasFile('image')) {
-            $data['image_path'] = ImageUploader::store($request->file('image'), 'combos');
-        }
 
         $combo = DB::transaction(function () use ($data, $request) {
             $combo = Combo::create($data);
@@ -42,29 +38,24 @@ class ComboController extends Controller
             return $combo;
         });
 
-        return (new ComboResource($combo->fresh()->load('items.product')))
+        // Up to four photos; the first becomes the cover (image_path).
+        GalleryImages::apply($combo, $request, 'combos');
+
+        return (new ComboResource($combo->fresh()->load(['items.product', 'images'])))
             ->response()->setStatusCode(201);
     }
 
     public function show(Combo $combo)
     {
-        return new ComboResource($combo->load('items.product'));
+        return new ComboResource($combo->load(['items.product', 'images']));
     }
 
     public function update(UpdateComboRequest $request, Combo $combo)
     {
-        $data = $request->safe()->except(['image', 'remove_image', 'items']);
+        $data = $request->safe()->except(['image', 'images', 'image_order', 'remove_image', 'items']);
 
         if ($request->filled('name')) {
             $data['slug'] = Slug::unique(Combo::class, $data['name'], 'slug', null, $combo->id);
-        }
-
-        if ($request->hasFile('image')) {
-            ImageUploader::delete($combo->image_path);
-            $data['image_path'] = ImageUploader::store($request->file('image'), 'combos');
-        } elseif ($request->boolean('remove_image')) {
-            ImageUploader::delete($combo->image_path);
-            $data['image_path'] = null;
         }
 
         DB::transaction(function () use ($combo, $data, $request) {
@@ -75,14 +66,15 @@ class ComboController extends Controller
             }
         });
 
-        return new ComboResource($combo->fresh()->load('items.product'));
+        // Add / remove / reorder photos (no photo fields sent = photos untouched).
+        GalleryImages::apply($combo, $request, 'combos');
+
+        return new ComboResource($combo->fresh()->load(['items.product', 'images']));
     }
 
     public function destroy(Combo $combo)
     {
-        ImageUploader::delete($combo->image_path);
-        $combo->image_path = null;
-        $combo->saveQuietly();
+        GalleryImages::purge($combo);
         $combo->delete();
 
         return response()->noContent();

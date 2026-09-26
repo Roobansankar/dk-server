@@ -10,7 +10,7 @@ use App\Http\Resources\ProductResource;
 use App\Models\Product;
 use App\Models\ProductStockMovement;
 use App\Services\ProductInventoryService;
-use App\Support\ImageUploader;
+use App\Support\GalleryImages;
 use App\Support\Slug;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -20,6 +20,7 @@ class ProductController extends Controller
     public function index(Request $request)
     {
         $products = Product::query()
+            ->with('images')
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->boolean('status')))
             ->when($request->filled('search'), fn ($q) => $q->where('name', 'like', '%'.$request->string('search').'%'))
             ->withSum(
@@ -34,14 +35,13 @@ class ProductController extends Controller
 
     public function store(StoreProductRequest $request, ProductInventoryService $inventory)
     {
-        $data = $request->safe()->except(['image', 'is_featured', 'stock_quantity']);
+        $data = $request->safe()->except(['image', 'images', 'image_order', 'is_featured', 'stock_quantity']);
         $data['slug'] = Slug::unique(Product::class, $request->string('name'));
 
-        if ($request->hasFile('image')) {
-            $data['image_path'] = ImageUploader::store($request->file('image'), 'products');
-        }
-
         $product = Product::create($data)->refresh();
+
+        // Up to four photos; the first becomes the cover (image_path).
+        GalleryImages::apply($product, $request, 'products');
 
         // Featured is never mass-assigned: route it through applyFeatured so the
         // one-featured-at-a-time rule is enforced (and locked) server-side.
@@ -52,31 +52,26 @@ class ProductController extends Controller
         // Opening stock goes through the inventory ledger, not mass assignment.
         $this->syncStock($product, $request, $inventory, 'Opening stock');
 
-        return (new ProductResource($product->fresh()))->response()->setStatusCode(201);
+        return (new ProductResource($product->fresh()->load('images')))->response()->setStatusCode(201);
     }
 
     public function show(Product $product)
     {
-        return new ProductResource($product);
+        return new ProductResource($product->load('images'));
     }
 
     public function update(UpdateProductRequest $request, Product $product, ProductInventoryService $inventory)
     {
-        $data = $request->safe()->except(['image', 'remove_image', 'is_featured', 'stock_quantity']);
+        $data = $request->safe()->except(['image', 'images', 'image_order', 'remove_image', 'is_featured', 'stock_quantity']);
 
         if ($request->filled('name')) {
             $data['slug'] = Slug::unique(Product::class, $data['name'], 'slug', null, $product->id);
         }
 
-        if ($request->hasFile('image')) {
-            ImageUploader::delete($product->image_path);
-            $data['image_path'] = ImageUploader::store($request->file('image'), 'products');
-        } elseif ($request->boolean('remove_image')) {
-            ImageUploader::delete($product->image_path);
-            $data['image_path'] = null;
-        }
-
         $product->update($data);
+
+        // Add / remove / reorder photos (no photo fields sent = photos untouched).
+        GalleryImages::apply($product, $request, 'products');
 
         // Featured is applied separately so the exclusive rule is enforced (and
         // row-locked) server-side. Turning it off leaves nothing featured.
@@ -86,7 +81,7 @@ class ProductController extends Controller
 
         $this->syncStock($product, $request, $inventory, 'Stock set from product form');
 
-        return new ProductResource($product->fresh());
+        return new ProductResource($product->fresh()->load('images'));
     }
 
     /**
@@ -111,9 +106,7 @@ class ProductController extends Controller
 
     public function destroy(Product $product)
     {
-        ImageUploader::delete($product->image_path);
-        $product->image_path = null;
-        $product->saveQuietly();
+        GalleryImages::purge($product);
         $product->delete();
 
         return response()->noContent();

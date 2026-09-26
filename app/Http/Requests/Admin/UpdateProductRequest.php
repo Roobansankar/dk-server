@@ -2,11 +2,14 @@
 
 namespace App\Http\Requests\Admin;
 
+use App\Http\Requests\Admin\Concerns\ValidatesGalleryImages;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
 
 class UpdateProductRequest extends FormRequest
 {
+    use ValidatesGalleryImages;
+
     public function authorize(): bool
     {
         return $this->user()->can('products.update');
@@ -15,6 +18,7 @@ class UpdateProductRequest extends FormRequest
     public function rules(): array
     {
         return [
+            ...$this->galleryRules(),
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'description' => ['sometimes', 'nullable', 'string', 'max:2000'],
             'image' => [
@@ -41,6 +45,8 @@ class UpdateProductRequest extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator) {
+            $this->checkGallery($validator, $this->route('product'));
+
             if ($validator->errors()->isNotEmpty()) {
                 return;
             }

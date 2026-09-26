@@ -15,7 +15,13 @@ class ProductResource extends JsonResource
             'name' => $this->name,
             'slug' => $this->slug,
             'description' => $this->description,
+            // The cover — always the first of `images` — for cards and lists.
             'image_url' => ImageUploader::url($this->image_path),
+            // Up to four photos, in the order the detail page shows them.
+            'images' => $this->whenLoaded('images', fn () => $this->images->map(fn ($image) => [
+                'id' => $image->id,
+                'url' => ImageUploader::url($image->path),
+            ])->values()),
             'mrp' => $this->mrp !== null ? (float) $this->mrp : null,
             'selling_price' => $this->selling_price !== null ? (float) $this->selling_price : null,
 	    'tax_percent' => $this->tax_percent !== null ? (float) $this->tax_percent : 0,

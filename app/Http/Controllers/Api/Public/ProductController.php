@@ -12,7 +12,7 @@ class ProductController extends Controller
     public function index()
     {
         return ProductResource::collection(
-            Product::query()->active()->ordered()->get()
+            Product::query()->active()->with('images')->ordered()->get()
         );
     }
 }

@@ -7,6 +7,7 @@ use App\Models\Service;
 use App\Models\ServiceCategory;
 use App\Models\Stylist;
 use App\Support\BillPdf;
+use App\Support\WhatsApp;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
@@ -376,9 +377,51 @@ class WhatsAppPaymentReceiptTest extends TestCase
         $this->assertSame('booking_confirmed', $message['template']['name']);
         $this->assertCount(1, $message['template']['components']); // body only
         $this->assertSame(
-            ['Walk-in Guest', 'Signature Facial', $appointment->appointment_date->toDateString(), '11:00 AM', '300.00', $appointment->reference],
+            ['Walk-in Guest', 'Signature Facial', $appointment->appointment_date->toDateString(), '11:00 AM to 12:00 PM', '300.00', $appointment->reference],
             collect($message['template']['components'][0]['parameters'])->pluck('text')->all(),
         );
+    }
+
+    /** The Time variable of the booking_confirmed message that was sent. */
+    private function sentTime(): string
+    {
+        return $this->messages()[0]['template']['components'][0]['parameters'][3]['text'];
+    }
+
+    public function test_the_booking_confirmation_shows_when_the_slot_starts_and_ends(): void
+    {
+        $this->createOffline(['appointment_time' => '20:00']); // Signature Facial runs 60 minutes
+
+        $this->assertSame('08:00 PM to 09:00 PM', $this->sentTime());
+    }
+
+    public function test_the_end_time_follows_the_service_duration_and_crosses_noon(): void
+    {
+        $service = $this->service();
+        $service->update(['duration_minutes' => 90]);
+
+        $this->createOffline(['service_id' => $service->id, 'category_id' => $service->service_category_id, 'appointment_time' => '11:30']);
+
+        $this->assertSame('11:30 AM to 01:00 PM', $this->sentTime());
+    }
+
+    public function test_the_end_time_falls_back_to_the_services_duration_when_the_booking_has_none(): void
+    {
+        $appointment = $this->advancePaid(['duration_minutes' => null, 'appointment_time' => '16:00']);
+
+        WhatsApp::sendBookingConfirmed($appointment->fresh());
+
+        $this->assertSame('04:00 PM to 05:00 PM', $this->sentTime());
+    }
+
+    public function test_only_the_start_time_is_sent_when_the_duration_is_unknown(): void
+    {
+        $appointment = $this->advancePaid(['duration_minutes' => null, 'appointment_time' => '16:00']);
+        $appointment->service->update(['duration_minutes' => null]);
+
+        WhatsApp::sendBookingConfirmed($appointment->fresh());
+
+        $this->assertSame('04:00 PM', $this->sentTime());
     }
 
     public function test_an_unpaid_confirmed_offline_appointment_still_gets_the_booking_confirmation(): void

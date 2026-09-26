@@ -2,19 +2,29 @@
 
 namespace App\Http\Requests\Admin;
 
+use App\Http\Requests\Admin\Concerns\ValidatesGalleryImages;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class StoreComboRequest extends FormRequest
 {
+    use ValidatesGalleryImages;
+
     public function authorize(): bool
     {
         return $this->user()->can('products.create');
     }
 
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(fn (Validator $validator) => $this->checkGallery($validator, null));
+    }
+
     public function rules(): array
     {
         return [
+            ...$this->galleryRules(),
             'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:2000'],
 	    'bundle_price' => ['nullable', 'numeric', 'min:0', 'max:9999999.99'],

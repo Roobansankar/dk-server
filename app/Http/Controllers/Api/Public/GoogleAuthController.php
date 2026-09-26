@@ -89,6 +89,14 @@ class GoogleAuthController extends Controller
 
         $user = User::where('google_id', $googleUser->getId())->first();
 
+        if ($user) {
+            // Refresh the photo on every Google sign-in so a missing or
+            // stale avatar heals itself instead of staying blank forever.
+            if ($googleUser->getAvatar() && $user->google_avatar_url !== $googleUser->getAvatar()) {
+                $user->forceFill(['google_avatar_url' => $googleUser->getAvatar()])->save();
+            }
+        }
+
         if (! $user) {
             $user = User::where('email', $googleUser->getEmail())->first();
 

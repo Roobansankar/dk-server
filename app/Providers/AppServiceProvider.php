@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Models\Appointment;
+use App\Models\Combo;
 use App\Models\GalleryImage;
 use App\Models\PricingPlan;
 use App\Models\Product;
@@ -26,6 +27,7 @@ use App\Policies\UserPolicy;
 use App\Policies\VideoPolicy;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
@@ -40,6 +42,12 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // Short names stored in catalogue_images.imageable_type, instead of class names.
+        Relation::morphMap([
+            'product' => Product::class,
+            'combo' => Combo::class,
+        ]);
+
         // Baseline API rate limit (per authenticated user, else per IP).
         RateLimiter::for('api', fn (Request $request) => Limit::perMinute(120)
             ->by($request->user()?->id ?: $request->ip()));

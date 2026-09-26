@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Models\Appointment;
 use App\Models\Order;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -78,21 +79,40 @@ class WhatsApp
         $lang = (string) config('services.whatsapp.language', 'en');
 
         $date = $appointment->appointment_date?->toDateString() ?? '';
-        $time = $appointment->appointment_time
-            ? \Illuminate\Support\Carbon::parse($appointment->appointment_time)->format('h:i A')
-            : '';
 
         // Must match {{1}}…{{6}} order in your approved template body exactly.
         $params = [
             (string) ($appointment->customer_name ?? 'Guest'),
             (string) ($appointment->service_name ?? 'your service'),
             $date,
-            $time,
+            self::timeRange($appointment),
             number_format((float) ($appointment->advance_amount ?? 0), 2),
             (string) ($appointment->reference ?? ''),
         ];
 
         return self::sendTemplate($to, $template, $lang, $params);
+    }
+
+    /**
+     * The slot as the customer should read it: "08:00 PM to 09:00 PM" — when it
+     * starts and when it ends (start + the service's duration). Only the start
+     * time when the duration isn't known, and '' when there is no time at all.
+     */
+    private static function timeRange(Appointment $appointment): string
+    {
+        if (! $appointment->appointment_time) {
+            return '';
+        }
+
+        $start = Carbon::parse($appointment->appointment_time);
+        $minutes = (int) ($appointment->duration_minutes
+            ?: $appointment->service()->withTrashed()->value('duration_minutes'));
+
+        if ($minutes < 1) {
+            return $start->format('h:i A');
+        }
+
+        return $start->format('h:i A').' to '.$start->copy()->addMinutes($minutes)->format('h:i A');
     }
 
     /**
