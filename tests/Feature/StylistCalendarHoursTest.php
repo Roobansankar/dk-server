@@ -182,6 +182,22 @@ class StylistCalendarHoursTest extends TestCase
         $this->assertSame('11:00', $stylist->dateHours()->whereDate('date', $this->nextMonday)->first()->start());
     }
 
+    public function test_a_day_can_be_listed_hour_by_hour_up_to_twelve_ranges(): void
+    {
+        $this->actingAsToken($this->superadmin());
+        $stylist = $this->stylistOffering($this->service());
+
+        // twelve back-to-back half-hour ranges, 10:00–16:00 (a day someone lists slot by slot)
+        $time = fn (int $halfHours) => sprintf('%02d:%02d', 10 + intdiv($halfHours, 2), ($halfHours % 2) * 30);
+        $ranges = array_map(fn (int $i) => [$time($i), $time($i + 1)], range(0, 11));
+
+        $this->setDates($stylist, [$this->custom($this->monday, $ranges)])
+            ->assertOk()
+            ->assertJsonCount(12, "data.date_hours.{$this->monday}");
+
+        $this->assertSame(12, $stylist->dateHours()->count());
+    }
+
     public function test_the_admin_list_counts_upcoming_days_not_ranges(): void
     {
         $this->actingAsToken($this->superadmin());
@@ -235,7 +251,7 @@ class StylistCalendarHoursTest extends TestCase
             'overlapping' => [[['date' => 3, 'mode' => 'custom', 'ranges' => [['start' => '10:00', 'end' => '14:00'], ['start' => '13:00', 'end' => '17:00']]]], 'days.0.ranges.1.start'],
             'before the studio opens' => [[['date' => 3, 'mode' => 'custom', 'ranges' => [['start' => '08:00', 'end' => '12:00']]]], 'days.0.ranges.0.start'],
             'after the studio closes' => [[['date' => 3, 'mode' => 'custom', 'ranges' => [['start' => '14:00', 'end' => '20:30']]]], 'days.0.ranges.0.start'],
-            'too many ranges' => [[['date' => 3, 'mode' => 'custom', 'ranges' => [$ok, $ok, $ok, $ok, $ok]]], 'days.0.ranges'],
+            'too many ranges (13)' => [[['date' => 3, 'mode' => 'custom', 'ranges' => array_fill(0, 13, $ok)]], 'days.0.ranges'],
             'same date twice' => [[['date' => 3, 'mode' => 'clear'], ['date' => 3, 'mode' => 'clear']], 'days.1.date'],
         ];
     }

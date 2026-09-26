@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Admin;
 
+use App\Http\Controllers\Api\Public\StylistController as PublicStylistController;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ReorderRequest;
 use App\Http\Requests\Admin\StoreStylistRequest;
@@ -25,8 +26,14 @@ class StylistController extends Controller
     public function index(Request $request)
     {
         $stylists = Stylist::query()
-            // Which services each offers, with their own prices (the offline-booking form uses them).
-            ->with(['services' => fn ($q) => $q->select('services.id')])
+            ->with([
+                // Which services each offers, with their own prices (the offline-booking form uses them).
+                'services' => fn ($q) => $q->select('services.id'),
+                // The upcoming dates each can be booked on — the offline-booking form offers only these.
+                'dateHours' => fn ($q) => $q
+                    ->whereDate('date', '>=', Carbon::now(BookingAvailability::TZ)->toDateString())
+                    ->whereDate('date', '<=', Carbon::now(BookingAvailability::TZ)->addDays(PublicStylistController::DATE_HOURS_DAYS_AHEAD)->toDateString()),
+            ])
             ->withCount([
                 'appointments',
                 'services',

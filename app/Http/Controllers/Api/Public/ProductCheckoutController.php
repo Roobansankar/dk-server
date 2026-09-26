@@ -10,10 +10,12 @@ use App\Models\ProductCheckout;
 use App\Services\ProductInventoryService;
 use App\Support\OrderPricing;
 use App\Support\Razorpay;
+use App\Support\WhatsApp;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
 
@@ -240,6 +242,17 @@ class ProductCheckoutController extends Controller
 
             return [$order, true];
         });
+
+        // A newly paid order → WhatsApp the customer their bill. Only on the first
+        // successful verification (a replayed callback returns the existing order
+        // and sends nothing), and best-effort: it can never fail or undo the payment.
+        if ($created) {
+            try {
+                DB::afterCommit(fn () => WhatsApp::sendOrderPaid($order->fresh()));
+            } catch (\Throwable $e) {
+                Log::warning('WhatsApp after order payment skipped: '.$e->getMessage());
+            }
+        }
 
         return (new OrderResource($order->load('items.selectedProducts')))
             ->additional([

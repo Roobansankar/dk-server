@@ -176,4 +176,26 @@ class StylistSetupTest extends TestCase
         $this->assertSame(0, $rows[$bare->id]['services_count']);
         $this->assertSame(0, $rows[$bare->id]['upcoming_days_count']);
     }
+
+    public function test_the_admin_list_carries_each_professionals_upcoming_dates_for_the_offline_form(): void
+    {
+        $this->actingAsToken($this->superadmin());
+        $service = $this->service();
+        $stylist = Stylist::factory()->create();
+        $stylist->services()->attach($service->id);
+        $stylist->dateHours()->create(['date' => $this->inDays(2), 'start_time' => '10:00', 'end_time' => '13:00']);
+        $stylist->dateHours()->create(['date' => $this->inDays(2), 'start_time' => '14:00', 'end_time' => '16:00']);
+        $stylist->dateHours()->create(['date' => $this->inDays(-3), 'start_time' => '10:00', 'end_time' => '13:00']); // already past
+        $stylist->dateHours()->create(['date' => $this->inDays(200), 'start_time' => '10:00', 'end_time' => '13:00']); // too far ahead
+        $bare = Stylist::factory()->create();
+
+        $rows = collect($this->getJson('/api/admin/stylists?per_page=100')->assertOk()->json('data'))->keyBy('id');
+
+        $this->assertSame(
+            [$this->inDays(2) => [['start' => '10:00', 'end' => '13:00'], ['start' => '14:00', 'end' => '16:00']]],
+            $rows[$stylist->id]['date_hours'],
+        );
+        $this->assertSame([$service->id], $rows[$stylist->id]['service_ids']);
+        $this->assertSame([], $rows[$bare->id]['date_hours']);
+    }
 }

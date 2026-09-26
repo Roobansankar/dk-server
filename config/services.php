@@ -60,6 +60,10 @@ return [
         'phone_number_id' => env('WHATSAPP_PHONE_NUMBER_ID'),
         'waba_id' => env('WHATSAPP_WABA_ID'),
         'template' => env('WHATSAPP_TEMPLATE_BOOKING_CONFIRMED', 'booking_confirmed'),
+        // Sent when staff mark an appointment "Paid in full" (name, service, total, reference).
+        'template_paid' => env('WHATSAPP_TEMPLATE_PAYMENT_RECEIVED', 'payment_received'),
+        // Sent when a shop order's payment is verified (name, order no, items, total) with the bill PDF.
+        'template_order' => env('WHATSAPP_TEMPLATE_ORDER_PAID', 'order_paid'),
         'language' => env('WHATSAPP_TEMPLATE_LANG', 'en'),
         'enabled' => env('WHATSAPP_ENABLED', true),
         // Webhook (POST/GET /api/whatsapp/webhook): the string you type as "Verify token" in

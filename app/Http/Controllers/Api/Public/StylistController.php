@@ -11,7 +11,7 @@ use Illuminate\Support\Carbon;
 class StylistController extends Controller
 {
     /** How far ahead calendar dates are sent — comfortably past the 60-day booking window. */
-    private const DATE_HOURS_DAYS_AHEAD = 120;
+    public const DATE_HOURS_DAYS_AHEAD = 120;
 
     public function index()
     {

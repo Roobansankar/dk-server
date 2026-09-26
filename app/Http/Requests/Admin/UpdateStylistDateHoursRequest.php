@@ -13,8 +13,11 @@ class UpdateStylistDateHoursRequest extends FormRequest
     /** How far ahead the calendar can be edited. */
     public const MAX_DAYS_AHEAD = 400;
 
-    /** Ranges allowed in one day — enough for a split shift, not a free-for-all. */
-    public const MAX_RANGES_PER_DAY = 4;
+    /**
+     * Ranges allowed in one day — enough to list a whole day hour by hour, not
+     * a free-for-all. Keep in step with MAX_RANGES in the admin StylistSetup page.
+     */
+    public const MAX_RANGES_PER_DAY = 12;
 
     public function authorize(): bool
     {

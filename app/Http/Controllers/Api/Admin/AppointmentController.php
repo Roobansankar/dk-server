@@ -12,12 +12,11 @@ use App\Models\Stylist;
 use App\Support\AppointmentFilters;
 use App\Support\AppointmentSlots;
 use App\Support\AppointmentsWorkbook;
+use App\Support\BillPdf;
 use App\Support\WhatsApp;
-use App\Models\SiteSetting;
-use Barryvdh\DomPDF\Facade\Pdf;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -111,14 +110,7 @@ class AppointmentController extends Controller
             return $appointment;
         });
 
-        // Walk-in created already-confirmed → notify the customer too (best-effort).
-        if ($appointment->status === Appointment::STATUS_CONFIRMED) {
-            try {
-                DB::afterCommit(fn () => WhatsApp::sendBookingConfirmed($appointment->fresh()));
-            } catch (\Throwable $e) {
-                Log::warning('WhatsApp after offline store skipped: '.$e->getMessage());
-            }
-        }
+        $this->notifyOfflineCreated($appointment);
 
         return (new AppointmentResource($appointment))
             ->additional(['message' => 'Offline appointment created.'])
@@ -138,17 +130,7 @@ class AppointmentController extends Controller
      */
     public function bill(Appointment $appointment)
     {
-        $settings = SiteSetting::allValues();
-
-        $pdf = Pdf::loadView('pdf.bill', [
-            'appointment' => $appointment,
-            'salonName' => $settings->get('salon_name', 'DK StyleHub'),
-            'salonPhone' => $settings->get('phone'),
-            'salonAddress' => $settings->get('address'),
-            'generatedAt' => now(),
-        ])->setPaper('a4');
-
-        return $pdf->download('bill-'.$appointment->reference.'.pdf');
+        return BillPdf::make($appointment)->download(BillPdf::filename($appointment));
     }
 
     /**
@@ -170,6 +152,7 @@ class AppointmentController extends Controller
     public function update(UpdateAppointmentRequest $request, Appointment $appointment)
     {
         $data = $request->validated();
+        $wasPaid = $appointment->payment_status === Appointment::PAYMENT_PAID;
 
         $targetStatus = $data['status'] ?? $appointment->status;
         $rescheduling = array_key_exists('appointment_date', $data) || array_key_exists('appointment_time', $data);
@@ -178,6 +161,7 @@ class AppointmentController extends Controller
 
         if (! $needsSlotCheck) {
             $appointment->update($data);
+            $this->notifyIfNowPaid($appointment, $wasPaid);
 
             return new AppointmentResource($appointment->fresh());
         }
@@ -215,7 +199,57 @@ class AppointmentController extends Controller
             return $locked;
         });
 
+        $this->notifyIfNowPaid($fresh, $wasPaid);
+
         return new AppointmentResource($fresh->fresh());
+    }
+
+    /**
+     * A walk-in / phone booking was just created — tell the customer on WhatsApp,
+     * by what was paid (best-effort: it can never fail or undo the booking):
+     *   - "Paid in full"  → the payment receipt with the bill PDF (`payment_received`);
+     *   - anything else, when created confirmed (i.e. "Advance paid") → the booking
+     *     confirmation (`booking_confirmed`).
+     * One message, never both; nothing for a cancelled/rejected booking.
+     */
+    private function notifyOfflineCreated(Appointment $appointment): void
+    {
+        $closed = in_array($appointment->status, [Appointment::STATUS_CANCELLED, Appointment::STATUS_REJECTED], true);
+        $paidInFull = $appointment->payment_status === Appointment::PAYMENT_PAID && ! $closed;
+
+        if (! $paidInFull && $appointment->status !== Appointment::STATUS_CONFIRMED) {
+            return;
+        }
+
+        try {
+            DB::afterCommit(fn () => $paidInFull
+                ? WhatsApp::sendPaymentReceived($appointment->fresh())
+                : WhatsApp::sendBookingConfirmed($appointment->fresh()));
+        } catch (\Throwable $e) {
+            Log::warning('WhatsApp after offline store skipped: '.$e->getMessage());
+        }
+    }
+
+    /**
+     * Staff just settled the bill ("Paid in full") → send the customer a
+     * WhatsApp payment receipt. Only on the change INTO paid — saving an
+     * already-paid appointment again, or any other edit, sends nothing — and
+     * never for a cancelled/rejected booking. Best-effort: a WhatsApp failure
+     * must not undo or fail the payment update.
+     */
+    private function notifyIfNowPaid(Appointment $appointment, bool $wasPaid): void
+    {
+        if ($wasPaid
+            || $appointment->payment_status !== Appointment::PAYMENT_PAID
+            || in_array($appointment->status, [Appointment::STATUS_CANCELLED, Appointment::STATUS_REJECTED], true)) {
+            return;
+        }
+
+        try {
+            DB::afterCommit(fn () => WhatsApp::sendPaymentReceived($appointment->fresh()));
+        } catch (\Throwable $e) {
+            Log::warning('WhatsApp after marking paid skipped: '.$e->getMessage());
+        }
     }
 
     /**
