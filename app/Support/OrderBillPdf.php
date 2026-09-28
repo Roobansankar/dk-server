@@ -24,6 +24,8 @@ class OrderBillPdf
             'salonName' => $settings->get('salon_name', 'DK StyleHub'),
             'salonPhone' => $settings->get('phone'),
             'salonAddress' => $settings->get('address'),
+            'instagramUrl' => $settings->get('instagram_url'),
+            'googleReviewUrl' => $settings->get('google_review_url'),
         ])->setPaper('a4');
     }
 

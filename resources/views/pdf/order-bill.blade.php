@@ -6,6 +6,7 @@
         $inr = fn ($v) => '&#8377; ' . number_format((float) $v, 2);
         $billedAt = $order->paid_at ?? $order->created_at;
         $paid = $order->payment_status === 'paid';
+        $instagramHandle = ! empty($instagramUrl) ? trim(parse_url($instagramUrl, PHP_URL_PATH) ?? '', '/') : null;
     @endphp
     @include('pdf.partials.styles')
 </head>
@@ -63,28 +64,56 @@
             </tbody>
         </table>
 
-        <table class="totals">
+        <table class="bottom-grid">
             <tr>
-                <td>Order total</td>
-                <td class="num">{!! $inr($order->total) !!}</td>
-            </tr>
-            <tr class="grand">
-                <td>Amount paid</td>
-                <td class="num">{!! $inr($order->amount_paid) !!}</td>
+                <td class="summary-col">
+                    <table class="totals">
+                        <tr>
+                            <td>Subtotal</td>
+                            <td class="num">{!! $inr($order->subtotal) !!}</td>
+                        </tr>
+                        <tr class="grand">
+                            <td>Grand total</td>
+                            <td class="num">{!! $inr($order->total) !!}</td>
+                        </tr>
+                        <tr>
+                            <td>Amount paid</td>
+                            <td class="num">{!! $inr($order->amount_paid) !!}</td>
+                        </tr>
+                    </table>
+
+                    @if ($paid)
+                        <div class="paid-via">
+                            <span class="tick">&#10003;</span> <b>Payment method</b> &mdash; Paid online via Razorpay
+                        </div>
+                    @endif
+
+                    <p class="note">Prices shown include applicable taxes.</p>
+                </td>
+                <td class="extras-col">
+                    @include('pdf.partials.extras', [
+                        'salonName' => $salonName,
+                        'instagramHandle' => $instagramHandle,
+                        'googleReviewUrl' => $googleReviewUrl ?? null,
+                    ])
+                </td>
             </tr>
         </table>
 
-        <p class="note">Prices shown include applicable taxes.</p>
-
         <div class="thanks">
             <div class="rule"></div>
-            Thank you for shopping with {{ $salonName }}!
+            <div class="line1">Thank you for shopping with {{ $salonName ?? 'DK StyleHub' }}!</div>
+            <div class="line2">Style &bull; Confidence &bull; You</div>
         </div>
     </div>
 
-    <div class="footer">
-        <div class="line"></div>
-        <p>{{ $salonName }} — order {{ $order->order_number }}</p>
-    </div>
+    @include('pdf.partials.footer', [
+        'docRef' => 'order ' . $order->order_number,
+        'salonName' => $salonName,
+        'salonPhone' => $salonPhone,
+        'salonAddress' => $salonAddress,
+        'instagramHandle' => $instagramHandle,
+        'terms' => 'Products once delivered are only replaced for a manufacturing defect.',
+    ])
 </body>
 </html>

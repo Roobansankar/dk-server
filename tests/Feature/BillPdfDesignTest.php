@@ -70,9 +70,11 @@ class BillPdfDesignTest extends TestCase
         ])->render();
     }
 
+    /** Both cached data URIs — the header renders the light one on its dark band. */
     private function setLogoCache(?string $value): void
     {
         (new ReflectionProperty(PdfLogo::class, 'uri'))->setValue(null, $value);
+        (new ReflectionProperty(PdfLogo::class, 'lightUri'))->setValue(null, $value);
     }
 
     protected function tearDown(): void
@@ -112,6 +114,33 @@ class BillPdfDesignTest extends TestCase
         $this->assertGreaterThan(500, $dark, 'the artwork is dark ink, for light backgrounds');
     }
 
+    public function test_the_light_logo_is_light_ink_on_transparency_for_the_dark_header(): void
+    {
+        $uri = PdfLogo::lightDataUri();
+
+        $this->assertStringStartsWith('data:image/png;base64,', $uri);
+
+        $bytes = base64_decode(substr($uri, strlen('data:image/png;base64,')), true);
+        $this->assertNotFalse($bytes);
+
+        [$width, $height] = getimagesizefromstring($bytes);
+        $this->assertGreaterThan($height, $width, 'the wide DK / STYLEHUB lock-up');
+
+        $image = imagecreatefromstring($bytes);
+        $this->assertSame(127, (imagecolorat($image, 2, 2) >> 24) & 127, 'the corners are transparent');
+
+        $light = 0;
+        for ($y = 0; $y < $height; $y += 4) {
+            for ($x = 0; $x < $width; $x += 4) {
+                $c = imagecolorat($image, $x, $y);
+                if ((($c >> 16) & 255) > 200 && (($c >> 8) & 255) > 200 && ($c & 255) > 200) {
+                    $light++;
+                }
+            }
+        }
+        $this->assertGreaterThan(500, $light, 'the artwork is light ink, for the dark header band');
+    }
+
     // --- The appointment bill ------------------------------------------------------
 
     public function test_the_appointment_bill_carries_the_logo_and_says_paid_in_full(): void
@@ -123,6 +152,7 @@ class BillPdfDesignTest extends TestCase
         $this->assertStringContainsString('APT-MKVQE1ZK', $html);
         $this->assertStringContainsString('&#8377; 1,500.00', $html);
         $this->assertStringNotContainsString('Balance due', $html);
+        $this->assertStringNotContainsString('Discount', $html);
     }
 
     public function test_the_bill_shows_when_the_slot_starts_and_ends(): void
@@ -148,6 +178,47 @@ class BillPdfDesignTest extends TestCase
         $this->assertStringContainsString('Balance due', $html);
         $this->assertStringContainsString('&#8377; 1,200.00', $html); // ₹1,500 − the ₹300 advance
         $this->assertStringContainsString('&#8377; 300.00', $html);   // received so far
+    }
+
+    public function test_a_settled_two_part_payment_is_itemised_as_advance_then_balance(): void
+    {
+        $html = $this->billHtml($this->appointment([
+            'source' => 'online',
+            'advance_amount' => 300,
+            'balance_payment_method' => 'cash',
+        ]));
+
+        $this->assertStringContainsString('Advance paid (Online)', $html);
+        $this->assertStringContainsString('Balance paid (Cash)', $html);
+        $this->assertStringContainsString('Amount received', $html);
+        $this->assertStringNotContainsString('Balance due', $html);
+        // advance ₹300 + balance ₹1,200 = the ₹1,500 service price.
+        $this->assertStringContainsString('&#8377; 300.00', $html);
+        $this->assertStringContainsString('&#8377; 1,200.00', $html);
+    }
+
+    public function test_a_still_owed_two_part_payment_shows_the_advance_and_what_remains(): void
+    {
+        $html = $this->billHtml($this->appointment([
+            'source' => 'online',
+            'payment_status' => 'advance_paid',
+            'advance_amount' => 300,
+        ]));
+
+        $this->assertStringContainsString('Advance paid (Online)', $html);
+        $this->assertStringContainsString('Balance due', $html);
+        $this->assertStringNotContainsString('Balance paid', $html);
+    }
+
+    public function test_paying_the_whole_price_online_in_one_go_is_not_treated_as_a_split(): void
+    {
+        // The "advance" covers the entire service price — there was never a separate balance.
+        $html = $this->billHtml($this->appointment(['source' => 'online', 'advance_amount' => 1500]));
+
+        $this->assertStringContainsString('Amount received', $html);
+        $this->assertStringNotContainsString('Advance paid', $html);
+        $this->assertStringNotContainsString('Balance paid', $html);
+        $this->assertStringContainsString('Paid via Online', $html);
     }
 
     public function test_the_bill_date_is_the_studios_time_not_the_servers_utc(): void
@@ -190,6 +261,7 @@ class BillPdfDesignTest extends TestCase
         $this->assertStringContainsString('ORD-QZIQX8QB', $html);
         $this->assertStringContainsString('Argan Oil', $html);
         $this->assertStringContainsString('include applicable taxes', $html);
+        $this->assertStringNotContainsString('Discount', $html);
     }
 
     // --- The real PDFs --------------------------------------------------------------

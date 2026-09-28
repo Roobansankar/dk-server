@@ -173,10 +173,16 @@ class PaymentController extends Controller
             return $locked;
         });
 
-        // WhatsApp confirmation to the CUSTOMER's own number — fire-and-forget.
+        // WhatsApp confirmations — fire-and-forget.
         // Never blocks/fails the payment response if Meta is down or misconfigured.
+        // Customer gets booking_confirmed on their own number; owner gets
+        // owner_booking_alert on WHATSAPP_OWNER_PHONE.
         try {
-            DB::afterCommit(fn () => WhatsApp::sendBookingConfirmed($confirmed->fresh()));
+            DB::afterCommit(function () use ($confirmed) {
+                $fresh = $confirmed->fresh();
+                WhatsApp::sendBookingConfirmed($fresh);
+                WhatsApp::sendOwnerBookingAlert($fresh);
+            });
         } catch (\Throwable $e) {
             Log::warning('WhatsApp after payment verify skipped: '.$e->getMessage());
         }

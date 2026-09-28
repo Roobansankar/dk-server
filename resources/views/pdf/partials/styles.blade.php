@@ -2,25 +2,24 @@
 <style>
     /* The top margin only shows from page 2 on (the header pulls itself flush to the top of page 1);
        the bottom margin keeps table rows clear of the footer. */
-    @page { margin: 34px 0 62px 0; }
+    @page { margin: 30px 0 98px 0; }
     * { font-family: 'DejaVu Sans', sans-serif; }
     body { margin: 0; color: #201e1b; font-size: 10.5px; line-height: 1.45; }
 
-    /* Header: accent strip, then the logo on the site's cream */
-    .top { margin-top: -34px; }
-    .strip { height: 7px; background: #9a7b53; }
-    .band { background: #f7f3ea; border-bottom: 1px solid #e4ddce; padding: 24px 44px 22px; }
+    /* Header: a solid dark band carrying the logo and the invoice details. */
+    .top { margin-top: -30px; }
+    .band { background: #14120f; padding: 26px 44px 22px; }
     .band table { width: 100%; border-collapse: collapse; }
-    .band td { padding: 0; vertical-align: middle; }
-    .logo { width: 112px; }
-    .contact { margin-top: 9px; font-size: 8.5px; line-height: 1.55; color: #6d6858; }
-    .doc-title { font-family: 'DejaVu Serif', serif; font-size: 25px; letter-spacing: 5px; text-transform: uppercase; text-align: right; color: #201e1b; }
-    .doc-ref { margin-top: 7px; text-align: right; font-size: 9.5px; letter-spacing: 0.5px; color: #6d6858; }
-    .badge { display: inline-block; margin-top: 11px; padding: 4px 14px; border-radius: 12px; background: #23503a; color: #ffffff; font-size: 8.5px; font-weight: bold; letter-spacing: 1.6px; }
-    .badge.pending { background: #9a6a00; }
+    .band td { padding: 0; vertical-align: top; }
+    .logo { width: 128px; }
+    .tagline { margin-top: 2px; font-size: 8px; font-weight: bold; letter-spacing: 2.6px; color: #c9a668; text-transform: uppercase; }
+    .doc-title { font-family: 'DejaVu Serif', serif; font-size: 27px; letter-spacing: 6px; text-transform: uppercase; text-align: right; color: #e8dcc0; }
+    .doc-ref { margin-top: 9px; text-align: right; font-size: 9.5px; letter-spacing: 0.3px; color: #a89f8a; }
+    .badge { display: inline-block; margin-top: 12px; padding: 5px 15px; border-radius: 12px; border: 1px solid #3f8f6a; background: rgba(64,143,106,0.16); color: #5fcb9a; font-size: 8.5px; font-weight: bold; letter-spacing: 1.6px; }
+    .badge.pending { border-color: #b3862e; background: rgba(179,134,46,0.16); color: #dcab52; }
     .right { text-align: right; }
 
-    .content { padding: 24px 44px 0; }
+    .content { padding: 26px 44px 0; }
 
     /* Info cards */
     /* The cards are the table cells themselves so they all share the tallest one's height;
@@ -36,27 +35,58 @@
     /* Line items */
     table.items { width: 100%; border-collapse: collapse; margin-top: 22px; }
     /* the dark fill sits on the row, not on each cell, so no hairline seams show between cells */
-    table.items thead tr { background: #201e1b; }
+    table.items thead tr { background: #14120f; }
     table.items th { color: #f7f3ea; font-size: 8px; font-weight: bold; letter-spacing: 1.4px; text-transform: uppercase; text-align: left; padding: 9px 10px; }
     table.items td { padding: 11px 10px; border-bottom: 1px solid #e4ddce; vertical-align: top; font-size: 10.5px; }
     table.items tr.alt td { background: #fbf9f4; }
     .item-name { font-weight: bold; color: #201e1b; }
     .sub { margin-top: 3px; font-size: 9px; color: #928c7b; }
     .num { text-align: right; }
+    /* .num on a <th> must out-rank "table.items th"'s own text-align, so headers
+       line up directly over the right-aligned numbers beneath them. */
+    table.items th.num { text-align: right; }
 
-    /* Totals */
-    table.totals { width: 46%; margin-left: 54%; margin-top: 14px; border-collapse: collapse; }
-    table.totals td { padding: 6px 10px; font-size: 10.5px; color: #4a4740; }
+    /* Payment summary (left) + extras (right), side by side */
+    table.bottom-grid { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    table.bottom-grid > tr > td { vertical-align: top; padding: 0; }
+    td.summary-col { width: 54%; padding-right: 16px; }
+    td.extras-col { width: 46%; }
+
+    table.totals { width: 100%; border-collapse: collapse; }
+    table.totals td { padding: 6px 2px; font-size: 10.5px; color: #4a4740; }
     table.totals td.num { text-align: right; }
-    table.totals tr.grand { background: #201e1b; }
-    table.totals tr.grand td { padding: 11px 10px; color: #f7f3ea; font-family: 'DejaVu Serif', serif; font-size: 13px; }
+    table.totals tr.grand { background: #14120f; }
+    table.totals tr.grand td { padding: 12px 10px; color: #f7f3ea; font-family: 'DejaVu Serif', serif; font-size: 13.5px; }
+    table.totals tr.grand td:first-child { border-radius: 4px 0 0 4px; }
+    table.totals tr.grand td:last-child { border-radius: 0 4px 4px 0; }
+
+    .paid-via { margin-top: 12px; padding: 9px 11px; border: 1px solid #e4ddce; border-radius: 6px; background: #faf7f0; font-size: 9.5px; color: #4a4740; }
+    .paid-via .tick { color: #23503a; font-weight: bold; }
+    .paid-via b { color: #201e1b; }
+
+    /* Extras: stacked boxes to the right of the totals */
+    .box { border-radius: 6px; padding: 11px 13px; font-size: 9px; line-height: 1.55; }
+    .box + .box { margin-top: 10px; }
+    .box-light { background: #faf3e4; border: 1px solid #ecdfc3; color: #4a4740; }
+    .box-light .box-title { display: block; margin-bottom: 3px; font-size: 8px; font-weight: bold; letter-spacing: 1.1px; text-transform: uppercase; color: #9a7b53; }
+    .box-light .box-strong { font-weight: bold; color: #201e1b; }
+    .box-dark { background: #14120f; color: #d9d2c2; }
+    .box-dark .box-title { display: block; margin-bottom: 3px; font-size: 9.5px; font-weight: bold; color: #e8dcc0; font-family: 'DejaVu Serif', serif; letter-spacing: 0.3px; }
+    .box-follow { border: 1px solid #e4ddce; border-radius: 6px; padding: 10px 12px; }
+    .box-follow p { margin: 3px 0; font-size: 9px; color: #4a4740; }
+    .box-follow .k { display: inline-block; width: 13px; color: #9a7b53; font-weight: bold; }
 
     .note { margin-top: 16px; font-size: 9px; color: #928c7b; }
-    .thanks { margin-top: 34px; text-align: center; font-family: 'DejaVu Serif', serif; font-style: italic; font-size: 11.5px; color: #6d6858; }
+    .thanks { margin-top: 30px; text-align: center; }
     .thanks .rule { width: 44px; height: 2px; margin: 0 auto 13px; background: #9a7b53; }
+    .thanks .line1 { font-family: 'DejaVu Serif', serif; font-style: italic; font-size: 12.5px; color: #4a4740; }
+    .thanks .line2 { margin-top: 5px; font-size: 8px; letter-spacing: 3px; text-transform: uppercase; color: #9a7b53; }
 
     /* Footer on every page */
-    .footer { position: fixed; bottom: -56px; left: 0; right: 0; }
-    .footer .line { height: 1px; margin: 0 44px; background: #e4ddce; }
-    .footer p { margin: 8px 44px 16px; text-align: center; font-size: 8px; letter-spacing: 0.4px; color: #928c7b; }
+    .footer { position: fixed; bottom: -74px; left: 0; right: 0; background: #14120f; color: #cfc7b4; }
+    .footer table { width: 100%; border-collapse: collapse; }
+    .footer td { padding: 14px 44px 0; font-size: 8.5px; vertical-align: top; line-height: 1.5; }
+    .footer .info { width: 70%; }
+    .footer .script { width: 30%; white-space: nowrap; text-align: right; font-family: 'DejaVu Serif', serif; font-style: italic; font-size: 11px; color: #e8dcc0; }
+    .footer .terms { padding: 9px 44px 14px; font-size: 7.5px; color: #8a8371; border-top: 1px solid #2b2823; margin-top: 10px; }
 </style>

@@ -1,14 +1,13 @@
 {{--
-    Top of every bill: the accent strip and the DK StyleHub logo (dark, as on the
-    website's navbar) with the salon's contact line on the left; the document
-    title, its number and the payment badge on the right.
+    Top of every bill: a dark band carrying the DK StyleHub mark (the light
+    version, as on the site's own dark footer) and tagline on the left; the
+    document title, its number and the payment badge on the right.
 
     Needs: $docTitle, $docRef, $badgeText, $badgePaid (bool);
-    optional: $salonName, $salonPhone, $salonAddress (from the including view).
+    optional: $salonName (from the including view).
 --}}
-@php $logo = \App\Support\PdfLogo::dataUri(); @endphp
+@php $logo = \App\Support\PdfLogo::lightDataUri(); @endphp
 <div class="top">
-<div class="strip"></div>
 <div class="band">
     <table>
         <tr>
@@ -18,13 +17,7 @@
                 @else
                     <div class="doc-title" style="text-align: left; font-size: 20px;">{{ $salonName ?? 'DK StyleHub' }}</div>
                 @endif
-                @if (! empty($salonPhone) || ! empty($salonAddress))
-                    <div class="contact">
-                        @if (! empty($salonPhone)){{ $salonPhone }}@endif
-                        @if (! empty($salonPhone) && ! empty($salonAddress))<br>@endif
-                        @if (! empty($salonAddress)){{ $salonAddress }}@endif
-                    </div>
-                @endif
+                <div class="tagline">Grooming &bull; Style &bull; Confidence</div>
             </td>
             <td class="right">
                 <div class="doc-title">{{ $docTitle }}</div>

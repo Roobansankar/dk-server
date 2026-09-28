@@ -243,12 +243,17 @@ class ProductCheckoutController extends Controller
             return [$order, true];
         });
 
-        // A newly paid order → WhatsApp the customer their bill. Only on the first
-        // successful verification (a replayed callback returns the existing order
-        // and sends nothing), and best-effort: it can never fail or undo the payment.
+        // A newly paid order → WhatsApp the customer their bill + alert the
+        // owner. Only on the first successful verification (a replayed
+        // callback returns the existing order and sends nothing), and
+        // best-effort: it can never fail or undo the payment.
         if ($created) {
             try {
-                DB::afterCommit(fn () => WhatsApp::sendOrderPaid($order->fresh()));
+                DB::afterCommit(function () use ($order) {
+                    $fresh = $order->fresh();
+                    WhatsApp::sendOrderPaid($fresh);
+                    WhatsApp::sendOwnerOrderAlert($fresh);
+                });
             } catch (\Throwable $e) {
                 Log::warning('WhatsApp after order payment skipped: '.$e->getMessage());
             }

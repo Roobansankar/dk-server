@@ -47,6 +47,11 @@ class WhatsAppPaymentReceiptTest extends TestCase
             'services.whatsapp.language' => 'en_US',
             'services.whatsapp.template' => 'booking_confirmed',
             'services.whatsapp.template_paid' => 'payment_received',
+            // Blank by default so legacy customer-only assertions stay 1:1.
+            // Owner tests set this to a test number explicitly.
+            'services.whatsapp.owner_phone' => '',
+            'services.whatsapp.template_owner_booking' => 'owner_booking_alert',
+            'services.whatsapp.template_owner_order' => 'owner_order_alert',
         ]);
         $this->fakeMeta();
 

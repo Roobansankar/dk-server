@@ -194,6 +194,116 @@ class WhatsApp
     }
 
     /**
+     * Studio owner's own number (E.164, no "+"), or null — logged — when
+     * WHATSAPP_OWNER_PHONE is blank/unusable. Owner alerts are best-effort
+     * and never affect the booking/order itself.
+     */
+    public static function ownerPhone(): ?string
+    {
+        $to = self::normalisePhone((string) config('services.whatsapp.owner_phone'));
+
+        if (strlen($to) < 10) {
+            Log::warning('WhatsApp owner skipped: WHATSAPP_OWNER_PHONE missing or invalid.');
+
+            return null;
+        }
+
+        return $to;
+    }
+
+    /**
+     * Notify the OWNER about a new/confirmed booking.
+     * Template `owner_booking_alert` (en_US, UTILITY):
+     * "Customer {{1}} with phone number {{2}} has booked service {{3}} for
+     *  date {{4}} during time slot {{5}}. Advance amount of Rs. {{6}} is paid
+     *  for booking reference {{7}}."
+     * Params must match {{1}}…{{7}} order exactly. Variables are mid-sentence
+     * (Meta rejects templates starting/ending with a variable or with too
+     * many variables for too little text).
+     * Never throws — returns true on success, false otherwise (logged).
+     */
+    public static function sendOwnerBookingAlert(Appointment $appointment): bool
+    {
+        if (! self::isConfigured()) {
+            return false;
+        }
+
+        $to = self::ownerPhone();
+        if ($to === null) {
+            return false;
+        }
+
+        $template = (string) config('services.whatsapp.template_owner_booking', 'owner_booking_alert');
+        $lang = (string) config('services.whatsapp.language', 'en');
+
+        $date = $appointment->appointment_date?->toDateString() ?? '';
+
+        $params = [
+            (string) ($appointment->customer_name ?? 'Guest'),
+            (string) ($appointment->phone ?? ''),
+            (string) ($appointment->service_name ?? 'your service'),
+            $date,
+            self::timeRange($appointment),
+            number_format((float) ($appointment->advance_amount ?? 0), 2),
+            (string) ($appointment->reference ?? ''),
+        ];
+
+        return self::sendTemplate($to, $template, $lang, $params);
+    }
+
+    /**
+     * Notify the OWNER about a newly paid product order.
+     * Template `owner_order_alert` (en_US, UTILITY):
+     * "Customer {{1}} with phone number {{2}} has placed order {{3}} for
+     *  items {{4}}. Total amount of Rs. {{5}} is paid online."
+     * Params must match {{1}}…{{5}} order exactly. Variables are mid-sentence.
+     * Never throws — returns true on success, false otherwise (logged).
+     */
+    public static function sendOwnerOrderAlert(Order $order): bool
+    {
+        if (! self::isConfigured()) {
+            return false;
+        }
+
+        $to = self::ownerPhone();
+        if ($to === null) {
+            return false;
+        }
+
+        $lang = (string) config('services.whatsapp.language', 'en');
+
+        $params = [
+            (string) ($order->customer_name ?? 'Guest'),
+            (string) ($order->phone ?? ''),
+            (string) $order->order_number,
+            self::itemsSummary($order),
+            number_format((float) $order->amount_paid, 2),
+        ];
+
+        return self::sendTemplate(
+            $to,
+            (string) config('services.whatsapp.template_owner_order', 'owner_order_alert'),
+            $lang,
+            $params
+        );
+    }
+
+    /**
+     * Convenience: notify BOTH customer (existing templates) and owner.
+     * Returns [customerOk, ownerOk]. Use from booking/order verify paths.
+     */
+    public static function notifyBookingConfirmed(Appointment $appointment): array
+    {
+        return [self::sendBookingConfirmed($appointment), self::sendOwnerBookingAlert($appointment)];
+    }
+
+    /** Convenience: notify BOTH customer and owner about a paid shop order. */
+    public static function notifyOrderPaid(Order $order): array
+    {
+        return [self::sendOrderPaid($order), self::sendOwnerOrderAlert($order)];
+    }
+
+    /**
      * Send a template whose header is a PDF bill: build the PDF, upload it to
      * WhatsApp, then send the template with it attached. The template's
      * Document header can't be left empty, so no PDF means no message.

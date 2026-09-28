@@ -32,6 +32,9 @@ class SiteSettingSeeder extends Seeder
             ['instagram_url', 'https://www.instagram.com/the_dk__stylehub', 'string', 'social'],
             ['whatsapp_url', 'https://wa.me/message/B32HQTKZGU3HF1', 'string', 'social'],
             ['facebook_url', null, 'string', 'social'],
+            // Shown on the bill PDFs (a "Scan for Google review" line) once filled in — left
+            // empty on purpose, same as every other key here with no known value.
+            ['google_review_url', null, 'string', 'social'],
             ['logo_path', null, 'string', 'branding'],
             ['favicon_path', null, 'string', 'branding'],
         ];

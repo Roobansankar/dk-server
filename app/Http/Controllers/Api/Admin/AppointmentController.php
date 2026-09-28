@@ -222,9 +222,15 @@ class AppointmentController extends Controller
         }
 
         try {
-            DB::afterCommit(fn () => $paidInFull
-                ? WhatsApp::sendPaymentReceived($appointment->fresh())
-                : WhatsApp::sendBookingConfirmed($appointment->fresh()));
+            DB::afterCommit(function () use ($appointment, $paidInFull) {
+                $fresh = $appointment->fresh();
+                if ($paidInFull) {
+                    WhatsApp::sendPaymentReceived($fresh);
+                } else {
+                    WhatsApp::sendBookingConfirmed($fresh);
+                    WhatsApp::sendOwnerBookingAlert($fresh);
+                }
+            });
         } catch (\Throwable $e) {
             Log::warning('WhatsApp after offline store skipped: '.$e->getMessage());
         }
@@ -330,9 +336,13 @@ class AppointmentController extends Controller
             return $locked;
         });
 
-        // Admin pressed Confirm → notify the customer on WhatsApp (best-effort).
+        // Admin pressed Confirm → notify the customer + owner on WhatsApp (best-effort).
         try {
-            DB::afterCommit(fn () => WhatsApp::sendBookingConfirmed($confirmed->fresh()));
+            DB::afterCommit(function () use ($confirmed) {
+                $fresh = $confirmed->fresh();
+                WhatsApp::sendBookingConfirmed($fresh);
+                WhatsApp::sendOwnerBookingAlert($fresh);
+            });
         } catch (\Throwable $e) {
             Log::warning('WhatsApp after admin confirm skipped: '.$e->getMessage());
         }

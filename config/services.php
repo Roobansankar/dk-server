@@ -68,6 +68,13 @@ return [
         'template_order_language' => env('WHATSAPP_TEMPLATE_ORDER_PAID_LANG'),
         'language' => env('WHATSAPP_TEMPLATE_LANG', 'en'),
         'enabled' => env('WHATSAPP_ENABLED', true),
+        // Owner alerts: same booking/order events, but sent to the studio's
+        // own number (WHATSAPP_OWNER_PHONE, e.g. 918072427484). Templates
+        // below carry customer name + phone + date/time/service (booking)
+        // and name + phone + order no + items + total (order).
+        'owner_phone' => env('WHATSAPP_OWNER_PHONE'),
+        'template_owner_booking' => env('WHATSAPP_TEMPLATE_OWNER_BOOKING', 'owner_booking_alert'),
+        'template_owner_order' => env('WHATSAPP_TEMPLATE_OWNER_ORDER', 'owner_order_alert'),
         // Webhook (POST/GET /api/whatsapp/webhook): the string you type as "Verify token" in
         // Meta's Configuration screen, and the app secret (App settings → Basic) that signs events.
         'verify_token' => env('WHATSAPP_VERIFY_TOKEN'),

@@ -24,6 +24,8 @@ class BillPdf
             'salonName' => $settings->get('salon_name', 'DK StyleHub'),
             'salonPhone' => $settings->get('phone'),
             'salonAddress' => $settings->get('address'),
+            'instagramUrl' => $settings->get('instagram_url'),
+            'googleReviewUrl' => $settings->get('google_review_url'),
             // The studio's clock (the app itself runs in UTC), so "Bill date" is the time in India.
             'generatedAt' => now(BookingAvailability::TZ),
         ])->setPaper('a4');

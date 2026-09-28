@@ -42,6 +42,10 @@ class WhatsAppOrderReceiptTest extends TestCase
             'services.whatsapp.phone_number_id' => '1347967731728408',
             'services.whatsapp.language' => 'en_US',
             'services.whatsapp.template_order' => 'order_paid',
+            // Blank by default so legacy customer-only assertions stay 1:1.
+            'services.whatsapp.owner_phone' => '',
+            'services.whatsapp.template_owner_booking' => 'owner_booking_alert',
+            'services.whatsapp.template_owner_order' => 'owner_order_alert',
         ]);
 
         Http::fake(function (Request $request) {
