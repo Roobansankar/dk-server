@@ -175,6 +175,8 @@ class WhatsApp
             $params,
             OrderBillPdf::filename($order),
             fn () => OrderBillPdf::make($order)->output(),
+            // A template is sent in the language it was created with; this one may differ from the others.
+            (string) config('services.whatsapp.template_order_language') ?: null,
         );
     }
 
@@ -198,8 +200,9 @@ class WhatsApp
      *
      * @param  array<int,string>  $params  ordered body values {{1}}, {{2}}, …
      * @param  \Closure(): string  $pdf  builds the PDF bytes
+     * @param  string|null  $lang  the template's language code, when it isn't the default one
      */
-    private static function sendWithBill(string $to, string $template, array $params, string $filename, \Closure $pdf): bool
+    private static function sendWithBill(string $to, string $template, array $params, string $filename, \Closure $pdf, ?string $lang = null): bool
     {
         try {
             $bytes = $pdf();
@@ -214,7 +217,7 @@ class WhatsApp
             return false;
         }
 
-        $lang = (string) config('services.whatsapp.language', 'en');
+        $lang ??= (string) config('services.whatsapp.language', 'en');
 
         return self::sendTemplate($to, $template, $lang, $params, ['id' => $mediaId, 'filename' => $filename]);
     }

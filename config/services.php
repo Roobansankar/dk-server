@@ -64,6 +64,8 @@ return [
         'template_paid' => env('WHATSAPP_TEMPLATE_PAYMENT_RECEIVED', 'payment_received'),
         // Sent when a shop order's payment is verified (name, order no, items, total) with the bill PDF.
         'template_order' => env('WHATSAPP_TEMPLATE_ORDER_PAID', 'order_paid'),
+        // Only if that template's language differs from WHATSAPP_TEMPLATE_LANG (e.g. "en" vs "en_US").
+        'template_order_language' => env('WHATSAPP_TEMPLATE_ORDER_PAID_LANG'),
         'language' => env('WHATSAPP_TEMPLATE_LANG', 'en'),
         'enabled' => env('WHATSAPP_ENABLED', true),
         // Webhook (POST/GET /api/whatsapp/webhook): the string you type as "Verify token" in

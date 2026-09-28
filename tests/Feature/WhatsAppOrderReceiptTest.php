@@ -136,6 +136,26 @@ class WhatsAppOrderReceiptTest extends TestCase
 
     // --- The message ----------------------------------------------------------
 
+    public function test_the_order_message_uses_the_shared_template_language_by_default(): void
+    {
+        $this->pay([$this->line($this->product('Argan Oil', 800))])->assertCreated();
+
+        $this->assertSame('en_US', $this->messages()[0]['template']['language']['code']);
+    }
+
+    public function test_the_order_template_can_have_its_own_language(): void
+    {
+        // e.g. created in Meta as "English" (en) while the other templates are "English (US)" (en_US)
+        config(['services.whatsapp.template_order' => 'order_paid_bill', 'services.whatsapp.template_order_language' => 'en']);
+
+        $this->pay([$this->line($this->product('Argan Oil', 800))])->assertCreated();
+
+        $template = $this->messages()[0]['template'];
+
+        $this->assertSame('order_paid_bill', $template['name']);
+        $this->assertSame('en', $template['language']['code']);
+    }
+
     public function test_a_paid_order_sends_the_order_paid_template_with_the_bill_pdf(): void
     {
         $oil = $this->product('Argan Oil', 800);
