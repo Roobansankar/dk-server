@@ -30,9 +30,6 @@
                         <h4>Order details</h4>
                         <p><span class="k">Order no.</span> &nbsp;{{ $order->order_number }}</p>
                         <p><span class="k">Date</span> &nbsp;{{ $billedAt?->timezone('Asia/Kolkata')->format('d M Y, h:i A') }}</p>
-                        @if ($order->razorpay_payment_id)
-                            <p><span class="k">Payment ID</span> &nbsp;{{ $order->razorpay_payment_id }}</p>
-                        @endif
                     </td>
                 </tr>
             </table>

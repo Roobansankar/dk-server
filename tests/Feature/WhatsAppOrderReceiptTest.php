@@ -349,7 +349,7 @@ class WhatsAppOrderReceiptTest extends TestCase
         $this->assertStringContainsString('Hair Care Package', $html);
         $this->assertStringContainsString('Pro-1, Pro-2', $html); // the products chosen inside the combo
         $this->assertStringContainsString('PAID', $html);
-        $this->assertStringContainsString('pay_ok', $html);
+        $this->assertStringNotContainsString('pay_ok', $html); // no gateway payment id on the customer bill
         $this->assertStringContainsString('&#8377; '.number_format((float) $order->amount_paid, 2), $html);
         $this->assertStringContainsString('include applicable taxes', $html);
     }

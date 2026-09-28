@@ -22,7 +22,7 @@ class SiteSettingSeeder extends Seeder
             ['phone', '+91 97904 31212', 'string', 'contact'],
             ['phone_href', 'tel:+919790431212', 'string', 'contact'],
             ['email', null, 'string', 'contact'],
-            ['address', null, 'text', 'contact'],
+            ['address', 'Shop No: 117, Rooftop, H, Patel Rd, near Hotel Vijay Park Inn, Ram Nagar, Coimbatore, Tamil Nadu 641009', 'text', 'contact'],
             ['business_hours', null, 'text', 'contact'],
             // Manual opening hours — shown on the public Contact page and used
             // to derive the booking picker's slot range. Defaults mirror the
