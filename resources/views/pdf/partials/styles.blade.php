@@ -60,7 +60,7 @@
     table.totals tr.grand td:first-child { border-radius: 4px 0 0 4px; }
     table.totals tr.grand td:last-child { border-radius: 0 4px 4px 0; }
 
-    .paid-via { margin-top: 12px; padding: 9px 11px; border: 1px solid #e4ddce; border-radius: 6px; background: #faf7f0; font-size: 9.5px; color: #4a4740; }
+    .paid-via { margin-top: 12px; padding: 9px 11px; border-radius: 6px; background: #faf7f0; font-size: 9.5px; color: #4a4740; }
     .paid-via .tick { color: #23503a; font-weight: bold; }
     .paid-via b { color: #201e1b; }
 
@@ -72,7 +72,7 @@
     .box-light .box-strong { font-weight: bold; color: #201e1b; }
     .box-dark { background: #14120f; color: #d9d2c2; }
     .box-dark .box-title { display: block; margin-bottom: 3px; font-size: 9.5px; font-weight: bold; color: #e8dcc0; font-family: 'DejaVu Serif', serif; letter-spacing: 0.3px; }
-    .box-follow { border: 1px solid #e4ddce; border-radius: 6px; padding: 10px 12px; }
+    .box-follow { border-radius: 6px; padding: 10px 12px; background: #faf7f0; }
     .box-follow p { margin: 3px 0; font-size: 9px; color: #4a4740; }
     .box-follow .k { display: inline-block; width: 13px; color: #9a7b53; font-weight: bold; }
 
@@ -82,8 +82,10 @@
     .thanks .line1 { font-family: 'DejaVu Serif', serif; font-style: italic; font-size: 12.5px; color: #4a4740; }
     .thanks .line2 { margin-top: 5px; font-size: 8px; letter-spacing: 3px; text-transform: uppercase; color: #9a7b53; }
 
-    /* Footer on every page */
-    .footer { position: fixed; bottom: -74px; left: 0; right: 0; background: #14120f; color: #cfc7b4; }
+    /* Footer on every page. The negative bottom exactly cancels the @page
+       bottom margin above, so the band sits flush with the true page edge
+       instead of leaving a sliver of white below it. */
+    .footer { position: fixed; bottom: -98px; left: 0; right: 0; background: #14120f; color: #cfc7b4; }
     .footer table { width: 100%; border-collapse: collapse; }
     .footer td { padding: 14px 44px 0; font-size: 8.5px; vertical-align: top; line-height: 1.5; }
     .footer .info { width: 70%; }
