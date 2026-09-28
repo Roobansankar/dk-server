@@ -74,11 +74,31 @@ class Stylist extends Model
 
     /**
      * The calendar dates they can be booked on, with the hours for each — see
-     * StylistDateHour. A date with no rows is a date they are not available.
+     * StylistDateHour. Always wins over their weekly schedule and any
+     * closure for the same date.
      */
     public function dateHours(): HasMany
     {
         return $this->hasMany(StylistDateHour::class);
+    }
+
+    /**
+     * Their standing weekly schedule ("every Monday 10–6") — see
+     * StylistWeeklyHour. The default a date falls back to when it has no
+     * hours of its own and isn't explicitly closed.
+     */
+    public function weeklyHours(): HasMany
+    {
+        return $this->hasMany(StylistWeeklyHour::class);
+    }
+
+    /**
+     * Calendar dates explicitly marked not available despite the weekly
+     * schedule — see StylistDateClosure.
+     */
+    public function dateClosures(): HasMany
+    {
+        return $this->hasMany(StylistDateClosure::class);
     }
 
     /** Professionals who offer the given service. */

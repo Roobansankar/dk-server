@@ -35,7 +35,7 @@ class Product extends Model
         return [
             'mrp' => 'decimal:2',
             'selling_price' => 'decimal:2',
-	    'tax_percent' => 'decimal:2',
+            'tax_percent' => 'decimal:2',
             'gst_inclusive' => 'boolean',
             'status' => 'boolean',
             'is_featured' => 'boolean',

@@ -27,8 +27,8 @@ class StoreComboRequest extends FormRequest
             ...$this->galleryRules(),
             'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:2000'],
-	    'bundle_price' => ['nullable', 'numeric', 'min:0', 'max:9999999.99'],
-	    'tax_percent' => ['sometimes', 'numeric', 'min:0', 'max:100'],
+            'bundle_price' => ['nullable', 'numeric', 'min:0', 'max:9999999.99'],
+            'tax_percent' => ['sometimes', 'numeric', 'min:0', 'max:100'],
             'image' => [
                 'nullable', 'file', 'image',
                 'mimes:'.implode(',', config('salon.uploads.mimes')),

@@ -1,7 +1,6 @@
 <?php
 
 use App\Http\Controllers\Api\Admin\AppointmentController as AdminAppointmentController;
-use App\Http\Controllers\Api\Admin\ProductInventoryController;
 use App\Http\Controllers\Api\Admin\ComboController as AdminComboController;
 use App\Http\Controllers\Api\Admin\DashboardController;
 use App\Http\Controllers\Api\Admin\GalleryImageController as AdminGalleryController;
@@ -10,19 +9,21 @@ use App\Http\Controllers\Api\Admin\PaymentReportController;
 use App\Http\Controllers\Api\Admin\PermissionController;
 use App\Http\Controllers\Api\Admin\PricingPlanController as AdminPricingPlanController;
 use App\Http\Controllers\Api\Admin\ProductController as AdminProductController;
+use App\Http\Controllers\Api\Admin\ProductInventoryController;
 use App\Http\Controllers\Api\Admin\ReviewController as AdminReviewController;
 use App\Http\Controllers\Api\Admin\RoleController;
 use App\Http\Controllers\Api\Admin\ServiceCategoryController as AdminServiceCategoryController;
 use App\Http\Controllers\Api\Admin\ServiceController as AdminServiceController;
 use App\Http\Controllers\Api\Admin\SiteSettingController as AdminSiteSettingController;
+use App\Http\Controllers\Api\Admin\StudioHolidayController as AdminStudioHolidayController;
 use App\Http\Controllers\Api\Admin\StylistController as AdminStylistController;
 use App\Http\Controllers\Api\Admin\UserController;
 use App\Http\Controllers\Api\Admin\VideoController as AdminVideoController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\Public\AccountController;
 use App\Http\Controllers\Api\Public\AppointmentController;
-use App\Http\Controllers\Api\Public\BookingSlotsController;
 use App\Http\Controllers\Api\Public\AuthController as CustomerAuthController;
+use App\Http\Controllers\Api\Public\BookingSlotsController;
 use App\Http\Controllers\Api\Public\ComboController;
 use App\Http\Controllers\Api\Public\GalleryController;
 use App\Http\Controllers\Api\Public\GoogleAuthController;
@@ -36,6 +37,7 @@ use App\Http\Controllers\Api\Public\SearchController;
 use App\Http\Controllers\Api\Public\ServiceCategoryController;
 use App\Http\Controllers\Api\Public\ServiceController;
 use App\Http\Controllers\Api\Public\SiteSettingController;
+use App\Http\Controllers\Api\Public\StudioHolidayController as PublicStudioHolidayController;
 use App\Http\Controllers\Api\Public\StylistController;
 use App\Http\Controllers\Api\Public\VideoController;
 use App\Http\Controllers\Api\Public\WhatsAppWebhookController;
@@ -65,6 +67,7 @@ Route::get('combos', [ComboController::class, 'index']);
 Route::get('gallery', [GalleryController::class, 'index']);
 Route::get('videos', [VideoController::class, 'index']);
 Route::get('stylists', [StylistController::class, 'index']);
+Route::get('studio-holidays', [PublicStudioHolidayController::class, 'index']);
 Route::get('pricing-plans', [PricingPlanController::class, 'index']);
 Route::get('site-settings', [SiteSettingController::class, 'index']);
 Route::get('reviews', [CustomerReviewController::class, 'index']);
@@ -193,36 +196,36 @@ Route::prefix('admin')->middleware(['auth:sanctum'])->group(function () {
     Route::match(['put', 'patch'], 'pricing-plans/{pricingPlan}', [AdminPricingPlanController::class, 'update'])->middleware('permission:pricing.manage');
     Route::delete('pricing-plans/{pricingPlan}', [AdminPricingPlanController::class, 'destroy'])->middleware('permission:pricing.manage');
 
-  // Products (retail shelf shown on the public site)
-Route::middleware('permission:products.view')->group(function () {
-    Route::get('products', [AdminProductController::class, 'index']);
-    Route::get('products/{product}', [AdminProductController::class, 'show']);
-});
+    // Products (retail shelf shown on the public site)
+    Route::middleware('permission:products.view')->group(function () {
+        Route::get('products', [AdminProductController::class, 'index']);
+        Route::get('products/{product}', [AdminProductController::class, 'show']);
+    });
 
-Route::post('products/reorder', [AdminProductController::class, 'reorder'])
-    ->middleware('permission:products.update');
+    Route::post('products/reorder', [AdminProductController::class, 'reorder'])
+        ->middleware('permission:products.update');
 
-Route::post('products', [AdminProductController::class, 'store'])
-    ->middleware('permission:products.create');
+    Route::post('products', [AdminProductController::class, 'store'])
+        ->middleware('permission:products.create');
 
-Route::match(['put', 'patch'], 'products/{product}', [AdminProductController::class, 'update'])
-    ->middleware('permission:products.update');
+    Route::match(['put', 'patch'], 'products/{product}', [AdminProductController::class, 'update'])
+        ->middleware('permission:products.update');
 
-Route::delete('products/{product}', [AdminProductController::class, 'destroy'])
-    ->middleware('permission:products.delete');
+    Route::delete('products/{product}', [AdminProductController::class, 'destroy'])
+        ->middleware('permission:products.delete');
 
-// Product stock management
-Route::get('inventory', [ProductInventoryController::class, 'index'])
-    ->middleware('permission:products.view');
+    // Product stock management
+    Route::get('inventory', [ProductInventoryController::class, 'index'])
+        ->middleware('permission:products.view');
 
-Route::get('inventory/history', [ProductInventoryController::class, 'history'])
-    ->middleware('permission:products.view');
+    Route::get('inventory/history', [ProductInventoryController::class, 'history'])
+        ->middleware('permission:products.view');
 
-Route::post('inventory/products/{product}/restock', [ProductInventoryController::class, 'restock'])
-    ->middleware('permission:products.update');
+    Route::post('inventory/products/{product}/restock', [ProductInventoryController::class, 'restock'])
+        ->middleware('permission:products.update');
 
-Route::post('inventory/products/{product}/adjust', [ProductInventoryController::class, 'adjust'])
-    ->middleware('permission:products.update');
+    Route::post('inventory/products/{product}/adjust', [ProductInventoryController::class, 'adjust'])
+        ->middleware('permission:products.update');
     // Combo products (included products + combo-specific prices) — same
     // permissions as the product catalogue they're built from.
     Route::middleware('permission:products.view')->group(function () {
@@ -262,7 +265,13 @@ Route::post('inventory/products/{product}/adjust', [ProductInventoryController::
     });
     Route::put('stylists/{stylist}/services', [AdminStylistController::class, 'syncServices'])->middleware('permission:stylists.manage');
     Route::put('stylists/{stylist}/date-hours', [AdminStylistController::class, 'updateDateHours'])->middleware('permission:stylists.manage');
+    Route::put('stylists/{stylist}/weekly-hours', [AdminStylistController::class, 'updateWeeklyHours'])->middleware('permission:stylists.manage');
     Route::post('stylists/reorder', [AdminStylistController::class, 'reorder'])->middleware('permission:stylists.manage');
+    // Studio-wide closed days (one entry closes every professional that date).
+    Route::get('studio-holidays', [AdminStudioHolidayController::class, 'index'])->middleware('permission:stylists.view');
+    Route::post('studio-holidays', [AdminStudioHolidayController::class, 'store'])->middleware('permission:stylists.manage');
+    Route::match(['put', 'patch'], 'studio-holidays/{studioHoliday}', [AdminStudioHolidayController::class, 'update'])->middleware('permission:stylists.manage');
+    Route::delete('studio-holidays/{studioHoliday}', [AdminStudioHolidayController::class, 'destroy'])->middleware('permission:stylists.manage');
     Route::post('stylists', [AdminStylistController::class, 'store'])->middleware('permission:stylists.manage');
     Route::match(['put', 'patch'], 'stylists/{stylist}', [AdminStylistController::class, 'update'])->middleware('permission:stylists.manage');
     Route::delete('stylists/{stylist}', [AdminStylistController::class, 'destroy'])->middleware('permission:stylists.manage');

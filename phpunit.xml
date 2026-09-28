@@ -44,5 +44,9 @@
         <env name="WHATSAPP_ENABLED" value="false"/>
         <env name="WHATSAPP_TOKEN" value=""/>
         <env name="WHATSAPP_PHONE_NUMBER_ID" value=""/>
+        <!-- Real .env sets this for the live order_paid_bill template — pinned
+             empty here so tests see the same "no override" default regardless
+             of what's actually configured for production. -->
+        <env name="WHATSAPP_TEMPLATE_ORDER_PAID_LANG" value=""/>
     </php>
 </phpunit>

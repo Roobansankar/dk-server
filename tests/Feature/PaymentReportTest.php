@@ -6,6 +6,7 @@ use App\Models\Appointment;
 use App\Models\Service;
 use App\Models\ServiceCategory;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use OpenSpout\Reader\XLSX\Reader;
 use Tests\Concerns\CreatesAdmins;
 use Tests\TestCase;
 
@@ -94,7 +95,7 @@ class PaymentReportTest extends TestCase
 
         $response = $this->get('/api/admin/payments/export?date_from=2026-06-01&date_to=2026-06-30')->assertOk();
 
-        $reader = new \OpenSpout\Reader\XLSX\Reader;
+        $reader = new Reader;
         $reader->open($response->baseResponse->getFile()->getPathname());
         $rows = [];
         foreach ($reader->getSheetIterator() as $sheet) {

@@ -29,7 +29,7 @@ class UpdateProductRequest extends FormRequest
             'remove_image' => ['sometimes', 'boolean'],
             'mrp' => ['sometimes', 'required', 'numeric', 'min:0', 'max:9999999.99'],
             'selling_price' => ['sometimes', 'required', 'numeric', 'min:0', 'max:9999999.99'],
-	    'tax_percent' => ['sometimes', 'numeric', 'min:0', 'max:100'],
+            'tax_percent' => ['sometimes', 'numeric', 'min:0', 'max:100'],
             'gst_inclusive' => ['sometimes', 'boolean'],
             'stock_quantity' => ['sometimes', 'integer', 'min:0', 'max:1000000'],
             'status' => ['sometimes', 'boolean'],

@@ -65,11 +65,11 @@ class ProductOrderTest extends TestCase
             'stock_quantity' => 100,
         ]);
 
-$this->combo = Combo::create([
-    'name' => 'Hair Care Package',
-    'slug' => 'hair-care-package',
-    'bundle_price' => 1400,
-]);
+        $this->combo = Combo::create([
+            'name' => 'Hair Care Package',
+            'slug' => 'hair-care-package',
+            'bundle_price' => 1400,
+        ]);
 
         foreach ([[$this->p1, 500], [$this->p2, 600], [$this->p3, 450]] as $i => [$product, $price]) {
             $this->combo->items()->create([

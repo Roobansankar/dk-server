@@ -24,7 +24,7 @@ class ProductResource extends JsonResource
             ])->values()),
             'mrp' => $this->mrp !== null ? (float) $this->mrp : null,
             'selling_price' => $this->selling_price !== null ? (float) $this->selling_price : null,
-	    'tax_percent' => $this->tax_percent !== null ? (float) $this->tax_percent : 0,
+            'tax_percent' => $this->tax_percent !== null ? (float) $this->tax_percent : 0,
             'gst_inclusive' => (bool) $this->gst_inclusive,
             'stock_quantity' => (int) $this->stock_quantity,
             // Units sold, summed from 'sale' stock movements — only present

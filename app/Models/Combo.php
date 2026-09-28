@@ -41,7 +41,7 @@ class Combo extends Model
     {
         return [
             'bundle_price' => 'decimal:2',
-	    'tax_percent' => 'decimal:2',
+            'tax_percent' => 'decimal:2',
             'status' => 'boolean',
             'sort_order' => 'integer',
         ];

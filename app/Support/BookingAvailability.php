@@ -5,8 +5,11 @@ namespace App\Support;
 use App\Models\Appointment;
 use App\Models\Service;
 use App\Models\SiteSetting;
+use App\Models\StudioHoliday;
 use App\Models\Stylist;
+use App\Models\StylistDateClosure;
 use App\Models\StylistDateHour;
+use App\Models\StylistWeeklyHour;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
@@ -18,12 +21,13 @@ use Illuminate\Support\Collection;
  *
  * A time is bookable with a professional when
  *   1. they offer the service (stylist_service),
- *   2. the whole service fits inside one of the hours an admin has set for
- *      them on that calendar date (stylist_date_hours — a date with no hours
- *      is simply not available), further limited to the studio's opening
- *      hours when those are set,
- *   3. it is not in the past (rounded like AppointmentSlots::earliestBookableTime), and
- *   4. it doesn't overlap one of their CONFIRMED appointments, padded by
+ *   2. the whole service fits inside one of their hours on that calendar
+ *      date — see windows() for how a date's hours are decided — further
+ *      limited to the studio's opening hours when those are set,
+ *   3. the date is not a studio-wide holiday (studio_holidays closes the
+ *      whole studio for every professional),
+ *   4. it is not in the past (rounded like AppointmentSlots::earliestBookableTime), and
+ *   5. it doesn't overlap one of their CONFIRMED appointments, padded by
  *      AppointmentSlots::ONLINE_BUFFER_MINUTES.
  *
  * "Any professional" (no stylist chosen) means: any eligible professional who
@@ -52,8 +56,10 @@ class BookingAvailability
     }
 
     /**
-     * Active professionals who offer $service and have hours set on an
-     * upcoming calendar date, in roster order.
+     * Active professionals who offer $service and could conceivably have
+     * hours: either a specific upcoming calendar date, or a standing weekly
+     * schedule (which applies indefinitely, so no date check is needed for
+     * that part). In roster order.
      *
      * @return Collection<int, Stylist>
      */
@@ -63,27 +69,32 @@ class BookingAvailability
             ->active()
             ->ordered()
             ->offering($service->id)
-            ->whereHas('dateHours', fn ($d) => $d->whereDate('date', '>=', Carbon::now(self::TZ)->toDateString()))
+            ->where(function ($query) {
+                $query
+                    ->whereHas('dateHours', fn ($d) => $d->whereDate('date', '>=', Carbon::now(self::TZ)->toDateString()))
+                    ->orWhereHas('weeklyHours');
+            })
             ->get();
     }
 
     /**
      * A professional's bookable ranges on $dateIso as [startMin, endMin] pairs,
-     * sorted, clipped to the studio's opening hours. Only hours an admin has
-     * set for that exact date count — no set hours means no ranges at all.
+     * sorted, clipped to the studio's opening hours. Decided in order:
+     *   0. a studio-wide holiday (studio_holidays) — the whole studio is
+     *      closed, so no ranges whatever anyone's own hours say;
+     *   1. hours set for that exact calendar date (stylist_date_hours) — if
+     *      any exist, they are the whole answer, custom hours or none;
+     *   2. otherwise, an explicit day off for that date (stylist_date_closures)
+     *      — no ranges;
+     *   3. otherwise, their standing weekly schedule for that weekday
+     *      (stylist_weekly_hours) — which itself may be empty.
      *
      * @return array<int, array{0: int, 1: int}>
      */
     public static function windows(Stylist $stylist, string $dateIso): array
     {
         $bounds = self::shopBounds();
-
-        $ranges = StylistDateHour::query()
-            ->where('stylist_id', $stylist->id)
-            ->whereDate('date', $dateIso)
-            ->get()
-            ->map(fn (StylistDateHour $row) => [self::minutes($row->start()), self::minutes($row->end())])
-            ->all();
+        $ranges = self::rangesFor($stylist, $dateIso);
 
         $out = [];
 
@@ -101,6 +112,65 @@ class BookingAvailability
         usort($out, fn ($a, $b) => $a[0] <=> $b[0]);
 
         return $out;
+    }
+
+    /**
+     * The raw (un-clipped) ranges a date's hours come from, per the precedence
+     * documented on windows().
+     *
+     * @return array<int, array{0: int, 1: int}>
+     */
+    public static function isStudioHoliday(string $dateIso): bool
+    {
+        return StudioHoliday::query()->whereDate('date', $dateIso)->exists();
+    }
+
+    /** The studio holiday on $dateIso, if the whole studio is closed that day. */
+    public static function studioHolidayOn(string $dateIso): ?StudioHoliday
+    {
+        return StudioHoliday::query()->whereDate('date', $dateIso)->first();
+    }
+
+    /**
+     * The raw (un-clipped) ranges a date's hours come from, per the precedence
+     * documented on windows().
+     *
+     * @return array<int, array{0: int, 1: int}>
+     */
+    private static function rangesFor(Stylist $stylist, string $dateIso): array
+    {
+        if (self::isStudioHoliday($dateIso)) {
+            return [];
+        }
+
+        $specific = StylistDateHour::query()
+            ->where('stylist_id', $stylist->id)
+            ->whereDate('date', $dateIso)
+            ->get();
+
+        if ($specific->isNotEmpty()) {
+            return $specific
+                ->map(fn (StylistDateHour $row) => [self::minutes($row->start()), self::minutes($row->end())])
+                ->all();
+        }
+
+        $closed = StylistDateClosure::query()
+            ->where('stylist_id', $stylist->id)
+            ->whereDate('date', $dateIso)
+            ->exists();
+
+        if ($closed) {
+            return [];
+        }
+
+        $weekday = Carbon::parse($dateIso, self::TZ)->dayOfWeek;
+
+        return StylistWeeklyHour::query()
+            ->where('stylist_id', $stylist->id)
+            ->where('weekday', $weekday)
+            ->get()
+            ->map(fn (StylistWeeklyHour $row) => [self::minutes($row->start()), self::minutes($row->end())])
+            ->all();
     }
 
     /**

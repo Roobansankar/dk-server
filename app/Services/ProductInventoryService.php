@@ -158,7 +158,7 @@ class ProductInventoryService
                 'type' => ProductStockMovement::TYPE_SALE,
                 'quantity' => -$quantity,
                 'balance_after' => $newBalance,
-                'reason' => 'Product order ' . $order->order_number,
+                'reason' => 'Product order '.$order->order_number,
                 'order_id' => $order->id,
                 'created_by' => $userId,
             ]);

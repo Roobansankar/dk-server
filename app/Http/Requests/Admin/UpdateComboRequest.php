@@ -27,8 +27,8 @@ class UpdateComboRequest extends FormRequest
             ...$this->galleryRules(),
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'description' => ['sometimes', 'nullable', 'string', 'max:2000'],
-	    'bundle_price' => ['sometimes', 'nullable', 'numeric', 'min:0', 'max:9999999.99'],
-	    'tax_percent' => ['sometimes', 'numeric', 'min:0', 'max:100'],
+            'bundle_price' => ['sometimes', 'nullable', 'numeric', 'min:0', 'max:9999999.99'],
+            'tax_percent' => ['sometimes', 'numeric', 'min:0', 'max:100'],
             'image' => [
                 'sometimes', 'file', 'image',
                 'mimes:'.implode(',', config('salon.uploads.mimes')),

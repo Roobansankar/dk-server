@@ -9,11 +9,14 @@ use App\Http\Requests\Admin\StoreStylistRequest;
 use App\Http\Requests\Admin\SyncStylistServicesRequest;
 use App\Http\Requests\Admin\UpdateStylistDateHoursRequest;
 use App\Http\Requests\Admin\UpdateStylistRequest;
+use App\Http\Requests\Admin\UpdateStylistWeeklyHoursRequest;
 use App\Http\Resources\StylistResource;
 use App\Models\Appointment;
 use App\Models\ServiceCategory;
+use App\Models\StudioHoliday;
 use App\Models\Stylist;
 use App\Models\StylistDateHour;
+use App\Models\StylistWeeklyHour;
 use App\Support\BookingAvailability;
 use App\Support\ImageUploader;
 use App\Support\Slug;
@@ -29,15 +32,22 @@ class StylistController extends Controller
             ->with([
                 // Which services each offers, with their own prices (the offline-booking form uses them).
                 'services' => fn ($q) => $q->select('services.id'),
-                // The upcoming dates each can be booked on — the offline-booking form offers only these.
+                // Specific dates, explicit days off and the standing weekly schedule —
+                // the offline-booking form combines all three, exactly like the public
+                // booking page, to decide which dates are actually offered.
                 'dateHours' => fn ($q) => $q
                     ->whereDate('date', '>=', Carbon::now(BookingAvailability::TZ)->toDateString())
                     ->whereDate('date', '<=', Carbon::now(BookingAvailability::TZ)->addDays(PublicStylistController::DATE_HOURS_DAYS_AHEAD)->toDateString()),
+                'dateClosures' => fn ($q) => $q
+                    ->whereDate('date', '>=', Carbon::now(BookingAvailability::TZ)->toDateString())
+                    ->whereDate('date', '<=', Carbon::now(BookingAvailability::TZ)->addDays(PublicStylistController::DATE_HOURS_DAYS_AHEAD)->toDateString()),
+                'weeklyHours',
             ])
             ->withCount([
                 'appointments',
                 'services',
-                // Upcoming calendar dates they have hours on — bookable only where this is > 0.
+                // Upcoming calendar dates with their OWN explicit hours — not the full
+                // bookable count once a weekly schedule is involved, but still a useful signal.
                 'dateHours as upcoming_days_count' => fn ($q) => $q
                     ->whereDate('date', '>=', Carbon::now(BookingAvailability::TZ)->toDateString())
                     ->select(DB::raw('count(distinct date)')),
@@ -143,11 +153,13 @@ class StylistController extends Controller
     }
 
     /**
-     * Set the hours a professional can be booked on specific calendar dates —
-     * `custom` gives the date its ranges, `clear` removes them (not available
-     * that day). Responds with the refreshed setup plus a list of dates where
-     * existing (pending/confirmed) appointments now fall outside the
-     * professional's hours — they are NOT cancelled, the admin is told.
+     * Set a professional's hours on specific calendar dates — `custom` gives
+     * the date its own ranges, `closed` marks it explicitly not available
+     * (overriding an otherwise-open weekly schedule), `clear` removes any
+     * override so the date follows the weekly schedule instead. Responds with
+     * the refreshed setup plus a list of dates where existing
+     * (pending/confirmed) appointments now fall outside the professional's
+     * hours — they are NOT cancelled, the admin is told.
      */
     public function updateDateHours(UpdateStylistDateHoursRequest $request, Stylist $stylist)
     {
@@ -156,6 +168,7 @@ class StylistController extends Controller
         DB::transaction(function () use ($stylist, $days) {
             foreach ($days as $day) {
                 $stylist->dateHours()->whereDate('date', $day['date'])->delete();
+                $stylist->dateClosures()->whereDate('date', $day['date'])->delete();
 
                 if ($day['mode'] === 'custom') {
                     foreach ($day['ranges'] as $range) {
@@ -165,6 +178,8 @@ class StylistController extends Controller
                             'end_time' => $range['end'],
                         ]);
                     }
+                } elseif ($day['mode'] === 'closed') {
+                    $stylist->dateClosures()->create(['date' => $day['date']]);
                 }
             }
         });
@@ -172,6 +187,49 @@ class StylistController extends Controller
         return response()->json([
             'data' => $this->setupPayload($stylist),
             'warnings' => $this->appointmentsOutsideHours($stylist, collect($days)->pluck('date')->all()),
+        ]);
+    }
+
+    /**
+     * Set a professional's standing weekly schedule ("every Monday 10–6",
+     * with no end date) — the default a calendar date falls back to when it
+     * has no hours of its own and isn't explicitly closed. Sending an empty
+     * range list for a weekday clears its standing hours (no longer part of
+     * the pattern). Weekdays not sent are left as they are.
+     */
+    public function updateWeeklyHours(UpdateStylistWeeklyHoursRequest $request, Stylist $stylist)
+    {
+        $days = $request->input('days', []);
+
+        DB::transaction(function () use ($stylist, $days) {
+            foreach ($days as $day) {
+                $stylist->weeklyHours()->where('weekday', $day['weekday'])->delete();
+
+                foreach ($day['ranges'] ?? [] as $range) {
+                    $stylist->weeklyHours()->create([
+                        'weekday' => $day['weekday'],
+                        'start_time' => $range['start'],
+                        'end_time' => $range['end'],
+                    ]);
+                }
+            }
+        });
+
+        // A weekly change can ripple across every future date on the touched
+        // weekdays — re-check every upcoming appointment rather than trying
+        // to enumerate which dates match.
+        $upcomingDates = $stylist->appointments()
+            ->whereIn('status', [Appointment::STATUS_PENDING, Appointment::STATUS_CONFIRMED])
+            ->whereDate('appointment_date', '>=', Carbon::now(BookingAvailability::TZ)->toDateString())
+            ->whereNotNull('appointment_time')
+            ->distinct()
+            ->pluck('appointment_date')
+            ->map(fn ($date) => $date->toDateString())
+            ->all();
+
+        return response()->json([
+            'data' => $this->setupPayload($stylist),
+            'warnings' => $this->appointmentsOutsideHours($stylist, $upcomingDates),
         ]);
     }
 
@@ -232,14 +290,40 @@ class StylistController extends Controller
             'service_ids' => $stylist->services()->pluck('services.id')->values()->all(),
             // Their own price / advance % per service (only where set; the rest use the standard).
             'service_terms' => $stylist->unsetRelation('services')->load('services')->serviceTerms(),
-            // The dates they can be booked on (today onwards) and the hours for each. Nothing
-            // is set by default: a date that isn't listed is a date they're not available.
+            // The dates they can be booked on (today onwards) and the hours for each — a
+            // specific override, always winning over the weekly schedule below. A date
+            // that isn't listed here follows the weekly schedule instead (see date_closures
+            // for a date explicitly excluded from it).
             'date_hours' => StylistDateHour::byDate(
                 $stylist->dateHours()
                     ->whereDate('date', '>=', Carbon::now(BookingAvailability::TZ)->toDateString())
                     ->whereDate('date', '<=', Carbon::now(BookingAvailability::TZ)->addDays(UpdateStylistDateHoursRequest::MAX_DAYS_AHEAD)->toDateString())
                     ->get()
             ),
+            // Calendar dates explicitly marked not available despite the weekly schedule —
+            // e.g. a holiday. Only matters for a date with no entry above.
+            'date_closures' => $stylist->dateClosures()
+                ->whereDate('date', '>=', Carbon::now(BookingAvailability::TZ)->toDateString())
+                ->whereDate('date', '<=', Carbon::now(BookingAvailability::TZ)->addDays(UpdateStylistDateHoursRequest::MAX_DAYS_AHEAD)->toDateString())
+                ->orderBy('date')
+                ->get()
+                ->map(fn ($row) => $row->date->toDateString())
+                ->values(),
+            // Their standing weekly schedule ("every Monday 10–6", no end date): { "1": [{start,
+            // end}, …] }, keyed "0" (Sunday) … "6" (Saturday). A weekday not listed has none.
+            // A specific date above, or a closure, overrides this for that one date.
+            'weekly_hours' => StylistWeeklyHour::byWeekday($stylist->weeklyHours),
+            // Studio-wide closed days (today onwards) — the whole studio is closed on
+            // these dates, whatever this professional's own hours say.
+            'studio_holidays' => StudioHoliday::query()
+                ->whereDate('date', '>=', Carbon::now(BookingAvailability::TZ)->toDateString())
+                ->orderBy('date')
+                ->get()
+                ->map(fn (StudioHoliday $holiday) => [
+                    'date' => $holiday->date->toDateString(),
+                    'name' => $holiday->name,
+                ])
+                ->values(),
             'shop_hours' => $bounds
                 ? ['opens' => BookingAvailability::format($bounds[0]), 'closes' => BookingAvailability::format($bounds[1])]
                 : null,

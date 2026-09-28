@@ -27,12 +27,17 @@ class UpdateStylistDateHoursRequest extends FormRequest
     public function rules(): array
     {
         return [
-            // Each entry sets ONE calendar date: `custom` (the professional can
-            // be booked that day, within the given ranges) or `clear` (remove the
-            // hours — not available that day). Dates not sent are left as they are.
+            // Each entry sets ONE calendar date to one of three states:
+            //   - `custom` — bookable within the given ranges, overriding both
+            //     the weekly schedule and any closure for that date;
+            //   - `closed` — explicitly not available that date, overriding an
+            //     otherwise-open weekly schedule (e.g. a holiday, a day off);
+            //   - `clear`  — no override for that date at all: it follows the
+            //     weekly schedule (StylistWeeklyHour), open or not.
+            // Dates not sent are left as they are.
             'days' => ['required', 'array', 'min:1', 'max:366'],
             'days.*.date' => ['required', 'date_format:Y-m-d', 'distinct'],
-            'days.*.mode' => ['required', 'in:custom,clear'],
+            'days.*.mode' => ['required', 'in:custom,clear,closed'],
             'days.*.ranges' => ['nullable', 'array', 'max:'.self::MAX_RANGES_PER_DAY],
             'days.*.ranges.*.start' => ['required', 'date_format:H:i'],
             'days.*.ranges.*.end' => ['required', 'date_format:H:i'],
