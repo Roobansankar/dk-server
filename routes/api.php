@@ -235,6 +235,7 @@ Route::post('inventory/products/{product}/adjust', [ProductInventoryController::
 
     // Product orders
     Route::get('orders', [AdminOrderController::class, 'index'])->middleware('permission:orders.view');
+    Route::get('orders/export', [AdminOrderController::class, 'export'])->middleware('permission:orders.view');
     Route::get('orders/{order}', [AdminOrderController::class, 'show'])->middleware('permission:orders.view');
     Route::match(['put', 'patch'], 'orders/{order}/status', [AdminOrderController::class, 'updateStatus'])->middleware('permission:orders.manage');
 
