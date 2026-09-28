@@ -46,10 +46,10 @@
        line up directly over the right-aligned numbers beneath them. */
     table.items th.num { text-align: right; }
 
-    /* Payment summary (left) + extras (right), side by side */
+    /* Payment summary (right) + extras (left), side by side */
     table.bottom-grid { width: 100%; border-collapse: collapse; margin-top: 20px; }
     table.bottom-grid > tr > td { vertical-align: top; padding: 0; }
-    td.summary-col { width: 54%; padding-right: 16px; }
+    td.summary-col { width: 54%; padding-left: 16px; }
     td.extras-col { width: 46%; }
 
     table.totals { width: 100%; border-collapse: collapse; }
@@ -64,7 +64,7 @@
     .paid-via .tick { color: #23503a; font-weight: bold; }
     .paid-via b { color: #201e1b; }
 
-    /* Extras: stacked boxes to the right of the totals */
+    /* Extras: stacked boxes to the left of the totals */
     .box { border-radius: 6px; padding: 11px 13px; font-size: 9px; line-height: 1.55; }
     .box + .box { margin-top: 10px; }
     .box-light { background: #faf3e4; border: 1px solid #ecdfc3; color: #4a4740; }

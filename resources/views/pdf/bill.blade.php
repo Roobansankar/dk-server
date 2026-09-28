@@ -102,6 +102,11 @@
 
         <table class="bottom-grid">
             <tr>
+                <td class="extras-col">
+                    @include('pdf.partials.extras', [
+                        'googleReviewUrl' => $googleReviewUrl ?? null,
+                    ])
+                </td>
                 <td class="summary-col">
                     <table class="totals">
                         <tr>
@@ -151,14 +156,6 @@
                             <span class="tick">&#10003;</span> <b>Payment method</b> &mdash; Paid via {{ $paidVia }}
                         </div>
                     @endif
-                </td>
-                <td class="extras-col">
-                    @include('pdf.partials.extras', [
-                        'salonName' => $salonName,
-                        'nextVisitNote' => 'We recommend your next visit in 3–4 weeks.',
-                        'instagramHandle' => $instagramHandle,
-                        'googleReviewUrl' => $googleReviewUrl ?? null,
-                    ])
                 </td>
             </tr>
         </table>

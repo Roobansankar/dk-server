@@ -66,6 +66,11 @@
 
         <table class="bottom-grid">
             <tr>
+                <td class="extras-col">
+                    @include('pdf.partials.extras', [
+                        'googleReviewUrl' => $googleReviewUrl ?? null,
+                    ])
+                </td>
                 <td class="summary-col">
                     <table class="totals">
                         <tr>
@@ -89,13 +94,6 @@
                     @endif
 
                     <p class="note">Prices shown include applicable taxes.</p>
-                </td>
-                <td class="extras-col">
-                    @include('pdf.partials.extras', [
-                        'salonName' => $salonName,
-                        'instagramHandle' => $instagramHandle,
-                        'googleReviewUrl' => $googleReviewUrl ?? null,
-                    ])
                 </td>
             </tr>
         </table>
