@@ -213,11 +213,18 @@ class WhatsApp
 
     /**
      * Notify the OWNER about a new/confirmed booking.
-     * Template `owner_booking_alert` (en_US, UTILITY):
-     * "Customer {{1}} with phone number {{2}} has booked service {{3}} for
-     *  date {{4}} during time slot {{5}}. Advance amount of Rs. {{6}} is paid
-     *  for booking reference {{7}}."
-     * Params must match {{1}}…{{7}} order exactly. Variables are mid-sentence
+     * Template `owner_booking_alert` (en_US, UTILITY), per the draft in Meta's
+     * WhatsApp Manager (still "In review" as of 2026-09-29 — re-check this
+     * once it's approved, in case Meta trims it further, the way it trimmed
+     * owner_order_alert):
+     * "Hello Dhilip, you have received a new appointment booking at DK
+     *  StyleHub. Customer {{1}} with phone number {{2}} has booked service
+     *  {{3}} for date {{4}} during time slot {{5}}. For booking reference
+     *  {{6}}. Please check the admin panel for full details and contact the
+     *  customer if any confirmation is needed."
+     * No advance-amount placeholder — the greeting/owner name and the
+     * closing line are fixed text baked into the template, not params.
+     * Params must match {{1}}…{{6}} order exactly. Variables are mid-sentence
      * (Meta rejects templates starting/ending with a variable or with too
      * many variables for too little text).
      * Never throws — returns true on success, false otherwise (logged).
@@ -244,7 +251,6 @@ class WhatsApp
             (string) ($appointment->service_name ?? 'your service'),
             $date,
             self::timeRange($appointment),
-            number_format((float) ($appointment->advance_amount ?? 0), 2),
             (string) ($appointment->reference ?? ''),
         ];
 
@@ -253,10 +259,11 @@ class WhatsApp
 
     /**
      * Notify the OWNER about a newly paid product order.
-     * Template `owner_order_alert` (en_US, UTILITY):
-     * "Customer {{1}} with phone number {{2}} has placed order {{3}} for
-     *  items {{4}}. Total amount of Rs. {{5}} is paid online."
-     * Params must match {{1}}…{{5}} order exactly. Variables are mid-sentence.
+     * Template `owner_order_alert` (en_US, UTILITY), as approved by Meta:
+     * "Customer {{1}} with phone number {{2}} has placed order {{3}}. Total
+     *  amount of Rs. {{4}} is paid online." — no items placeholder; Meta's
+     * review trimmed the free-text item list the template was drafted with.
+     * Params must match {{1}}…{{4}} order exactly. Variables are mid-sentence.
      * Never throws — returns true on success, false otherwise (logged).
      */
     public static function sendOwnerOrderAlert(Order $order): bool
@@ -276,7 +283,6 @@ class WhatsApp
             (string) ($order->customer_name ?? 'Guest'),
             (string) ($order->phone ?? ''),
             (string) $order->order_number,
-            self::itemsSummary($order),
             number_format((float) $order->amount_paid, 2),
         ];
 

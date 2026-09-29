@@ -193,6 +193,26 @@ class WhatsAppOrderReceiptTest extends TestCase
         );
     }
 
+    public function test_the_owner_is_alerted_with_exactly_the_four_params_meta_approved(): void
+    {
+        // Meta approved owner_order_alert with 4 placeholders, not the 5 the
+        // template was drafted with — sending a 5th trips error 132000 and
+        // the owner never gets notified. Regression test for that.
+        config(['services.whatsapp.owner_phone' => '9876500000']);
+
+        $this->pay([$this->line($this->product('Argan Oil', 800))])->assertCreated();
+
+        $order = Order::firstOrFail();
+        $owner = collect($this->messages())->first(fn ($m) => $m['template']['name'] === 'owner_order_alert');
+
+        $this->assertNotNull($owner, 'owner_order_alert was never sent');
+        $this->assertSame('919876500000', $owner['to']);
+        $this->assertSame(
+            ['Asha Rao', $order->phone, $order->order_number, '800.00'],
+            collect($this->bodyOf($owner))->pluck('text')->all(),
+        );
+    }
+
     public function test_the_uploaded_file_is_a_real_pdf_named_after_the_order(): void
     {
         $this->pay([$this->line($this->product('Argan Oil', 800))])->assertCreated();

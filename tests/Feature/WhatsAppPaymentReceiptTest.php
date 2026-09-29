@@ -86,7 +86,7 @@ class WhatsAppPaymentReceiptTest extends TestCase
 
         return Appointment::factory()->forService($service)->forStylist(Stylist::factory()->create())->create($overrides + [
             'customer_name' => 'Priya R',
-            'phone' => '9944381709',
+            'phone' => '8072427484',
             'status' => Appointment::STATUS_CONFIRMED,
             'payment_status' => Appointment::PAYMENT_ADVANCE_PAID,
             'appointment_date' => now('Asia/Kolkata')->addDays(3)->toDateString(),
@@ -135,7 +135,7 @@ class WhatsAppPaymentReceiptTest extends TestCase
         $message = $this->messages()[0];
         [$header, $body] = $message['template']['components'];
 
-        $this->assertSame('919944381709', $message['to']);
+        $this->assertSame('918072427484', $message['to']);
         $this->assertSame('template', $message['type']);
         $this->assertSame('payment_received', $message['template']['name']);
         $this->assertSame('en_US', $message['template']['language']['code']);
@@ -315,7 +315,7 @@ class WhatsAppPaymentReceiptTest extends TestCase
 
         $this->setPayment($appointment, 'paid')->assertOk();
 
-        $this->assertSame('919944381709', $this->messages()[0]['to']);
+        $this->assertSame('918072427484', $this->messages()[0]['to']);
     }
 
     // --- Created through the Offline Appointment form -----------------------------
@@ -328,7 +328,7 @@ class WhatsAppPaymentReceiptTest extends TestCase
 
         return array_merge([
             'customer_name' => 'Walk-in Guest',
-            'phone' => '9944381709',
+            'phone' => '8072427484',
             'gender' => 'female',
             'category_id' => $service->service_category_id,
             'service_id' => $service->id,
@@ -358,7 +358,7 @@ class WhatsAppPaymentReceiptTest extends TestCase
         $message = $this->messages()[0];
         [$header, $body] = $message['template']['components'];
 
-        $this->assertSame('919944381709', $message['to']);
+        $this->assertSame('918072427484', $message['to']);
         $this->assertSame('payment_received', $message['template']['name']);
         $this->assertSame(
             [['type' => 'document', 'document' => ['id' => 'MEDIA123', 'filename' => "bill-{$appointment->reference}.pdf"]]],
@@ -384,6 +384,28 @@ class WhatsAppPaymentReceiptTest extends TestCase
         $this->assertSame(
             ['Walk-in Guest', 'Signature Facial', $appointment->appointment_date->toDateString(), '11:00 AM to 12:00 PM', '300.00', $appointment->reference],
             collect($message['template']['components'][0]['parameters'])->pluck('text')->all(),
+        );
+    }
+
+    public function test_the_owner_booking_alert_matches_the_six_params_meta_has_on_file(): void
+    {
+        // owner_order_alert was drafted with one param count and approved with fewer
+        // (see WhatsAppOrderReceiptTest) — this pins owner_booking_alert to the exact
+        // wording in Meta's WhatsApp Manager (no advance-amount placeholder) so the
+        // same drift can't happen here once it clears review.
+        config(['services.whatsapp.owner_phone' => '9876500001']);
+
+        $appointment = $this->createOffline(['payment_status' => 'advance_paid']);
+
+        $this->assertCount(2, $this->messages());
+        $owner = collect($this->messages())->first(fn ($m) => $m['template']['name'] === 'owner_booking_alert');
+
+        $this->assertNotNull($owner, 'owner_booking_alert was never sent');
+        $this->assertSame('919876500001', $owner['to']);
+        $this->assertCount(1, $owner['template']['components']); // body only, no PDF
+        $this->assertSame(
+            ['Walk-in Guest', $appointment->phone, 'Signature Facial', $appointment->appointment_date->toDateString(), '11:00 AM to 12:00 PM', $appointment->reference],
+            collect($owner['template']['components'][0]['parameters'])->pluck('text')->all(),
         );
     }
 
