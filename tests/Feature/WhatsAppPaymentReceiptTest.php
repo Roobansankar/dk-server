@@ -50,7 +50,7 @@ class WhatsAppPaymentReceiptTest extends TestCase
             // Blank by default so legacy customer-only assertions stay 1:1.
             // Owner tests set this to a test number explicitly.
             'services.whatsapp.owner_phone' => '',
-            'services.whatsapp.template_owner_booking' => 'owner_booking_alert',
+            'services.whatsapp.template_owner_booking' => 'owner_booking_alert_v2',
             'services.whatsapp.template_owner_order' => 'owner_order_alert',
         ]);
         $this->fakeMeta();
@@ -387,24 +387,24 @@ class WhatsAppPaymentReceiptTest extends TestCase
         );
     }
 
-    public function test_the_owner_booking_alert_matches_the_six_params_meta_has_on_file(): void
+    public function test_the_owner_booking_alert_matches_the_seven_params_meta_has_on_file(): void
     {
-        // owner_order_alert was drafted with one param count and approved with fewer
-        // (see WhatsAppOrderReceiptTest) — this pins owner_booking_alert to the exact
-        // wording in Meta's WhatsApp Manager (no advance-amount placeholder) so the
-        // same drift can't happen here once it clears review.
+        // Old owner_booking_alert had 6 params (no stylist). v2 adds {{7}}
+        // stylist name — this pins owner_booking_alert_v2 to the exact
+        // wording in Meta's WhatsApp Manager so param-count drift can't
+        // happen again (see owner_order_alert history in WhatsAppOrderReceiptTest).
         config(['services.whatsapp.owner_phone' => '9876500001']);
 
         $appointment = $this->createOffline(['payment_status' => 'advance_paid']);
 
         $this->assertCount(2, $this->messages());
-        $owner = collect($this->messages())->first(fn ($m) => $m['template']['name'] === 'owner_booking_alert');
+        $owner = collect($this->messages())->first(fn ($m) => $m['template']['name'] === 'owner_booking_alert_v2');
 
-        $this->assertNotNull($owner, 'owner_booking_alert was never sent');
+        $this->assertNotNull($owner, 'owner_booking_alert_v2 was never sent');
         $this->assertSame('919876500001', $owner['to']);
         $this->assertCount(1, $owner['template']['components']); // body only, no PDF
         $this->assertSame(
-            ['Walk-in Guest', $appointment->phone, 'Signature Facial', $appointment->appointment_date->toDateString(), '11:00 AM to 12:00 PM', $appointment->reference],
+            ['Walk-in Guest', $appointment->phone, 'Signature Facial', $appointment->appointment_date->toDateString(), '11:00 AM to 12:00 PM', $appointment->reference, $appointment->stylist_name ?: 'Any available'],
             collect($owner['template']['components'][0]['parameters'])->pluck('text')->all(),
         );
     }

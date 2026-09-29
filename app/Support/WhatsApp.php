@@ -213,20 +213,21 @@ class WhatsApp
 
     /**
      * Notify the OWNER about a new/confirmed booking.
-     * Template `owner_booking_alert` (en_US, UTILITY), per the draft in Meta's
-     * WhatsApp Manager (still "In review" as of 2026-09-29 — re-check this
-     * once it's approved, in case Meta trims it further, the way it trimmed
-     * owner_order_alert):
+     * Template `owner_booking_alert_v2` (en_US, UTILITY) — replaces the old
+     * 6-param `owner_booking_alert` (which had no stylist). Create it in
+     * Meta's WhatsApp Manager with EXACTLY this body (7 params, variables
+     * mid-sentence — Meta rejects templates starting/ending with a variable):
+     *
      * "Hello Dhilip, you have received a new appointment booking at DK
      *  StyleHub. Customer {{1}} with phone number {{2}} has booked service
      *  {{3}} for date {{4}} during time slot {{5}}. For booking reference
-     *  {{6}}. Please check the admin panel for full details and contact the
-     *  customer if any confirmation is needed."
-     * No advance-amount placeholder — the greeting/owner name and the
-     * closing line are fixed text baked into the template, not params.
-     * Params must match {{1}}…{{6}} order exactly. Variables are mid-sentence
-     * (Meta rejects templates starting/ending with a variable or with too
-     * many variables for too little text).
+     *  {{6}}. Stylist assigned is {{7}}. Please check the admin panel for
+     *  full details and contact the customer if any confirmation is needed."
+     *
+     * Params must match {{1}}…{{7}} order exactly:
+     * {{1}} customer name, {{2}} customer phone, {{3}} service,
+     * {{4}} appointment date (Y-m-d), {{5}} time slot, {{6}} reference,
+     * {{7}} stylist name ('Any available' when none assigned).
      * Never throws — returns true on success, false otherwise (logged).
      */
     public static function sendOwnerBookingAlert(Appointment $appointment): bool
@@ -240,7 +241,7 @@ class WhatsApp
             return false;
         }
 
-        $template = (string) config('services.whatsapp.template_owner_booking', 'owner_booking_alert');
+        $template = (string) config('services.whatsapp.template_owner_booking', 'owner_booking_alert_v2');
         $lang = (string) config('services.whatsapp.language', 'en');
 
         $date = $appointment->appointment_date?->toDateString() ?? '';
@@ -252,6 +253,7 @@ class WhatsApp
             $date,
             self::timeRange($appointment),
             (string) ($appointment->reference ?? ''),
+            (string) ($appointment->stylist_name ?: $appointment->stylist?->name ?: 'Any available'),
         ];
 
         return self::sendTemplate($to, $template, $lang, $params);

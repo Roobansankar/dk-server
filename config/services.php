@@ -73,7 +73,7 @@ return [
         // below carry customer name + phone + date/time/service (booking)
         // and name + phone + order no + items + total (order).
         'owner_phone' => env('WHATSAPP_OWNER_PHONE'),
-        'template_owner_booking' => env('WHATSAPP_TEMPLATE_OWNER_BOOKING', 'owner_booking_alert'),
+        'template_owner_booking' => env('WHATSAPP_TEMPLATE_OWNER_BOOKING', 'owner_booking_alert_v2'),
         'template_owner_order' => env('WHATSAPP_TEMPLATE_OWNER_ORDER', 'owner_order_alert'),
         // Webhook (POST/GET /api/whatsapp/webhook): the string you type as "Verify token" in
         // Meta's Configuration screen, and the app secret (App settings → Basic) that signs events.

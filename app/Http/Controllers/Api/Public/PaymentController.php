@@ -176,7 +176,7 @@ class PaymentController extends Controller
         // WhatsApp confirmations — fire-and-forget.
         // Never blocks/fails the payment response if Meta is down or misconfigured.
         // Customer gets booking_confirmed on their own number; owner gets
-        // owner_booking_alert on WHATSAPP_OWNER_PHONE.
+        // owner_booking_alert_v2 on WHATSAPP_OWNER_PHONE.
         try {
             DB::afterCommit(function () use ($confirmed) {
                 $fresh = $confirmed->fresh();

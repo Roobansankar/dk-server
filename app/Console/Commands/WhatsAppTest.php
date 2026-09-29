@@ -52,9 +52,9 @@ class WhatsAppTest extends Command
         } else {
             $template = (string) ($this->option('template') ?: config('services.whatsapp.template', 'booking_confirmed'));
             // Dummy params in the same {{1}}…{{6}} order as sendBookingConfirmed().
-            // For owner test use: --template=owner_booking_alert (adds customer phone → 7 params).
-            if ($template === config('services.whatsapp.template_owner_booking', 'owner_booking_alert')) {
-                $params = ['Test Guest', '9876543210', 'Haircut', now()->toDateString(), '10:00 AM to 11:00 AM', number_format(199.00, 2), 'APT-TEST123'];
+            // For owner test use: --template=owner_booking_alert_v2 (adds customer phone + stylist → 7 params).
+            if ($template === config('services.whatsapp.template_owner_booking', 'owner_booking_alert_v2')) {
+                $params = ['Test Guest', '9876543210', 'Haircut', now()->toDateString(), '10:00 AM to 11:00 AM', 'APT-TEST123', 'Devi K'];
             } else {
                 $params = [
                     'Test Guest',
