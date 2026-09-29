@@ -58,6 +58,56 @@ class GoogleAuthTest extends TestCase
         $this->assertStringContainsString(urlencode('http://localhost:8000/api/account/google/callback'), $url);
     }
 
+    public function test_redirect_carries_the_return_path_through_as_state(): void
+    {
+        $this->configureGoogle();
+
+        $url = $this->getJson('/api/account/google/redirect?redirect_to=/booking')->assertOk()->json('url');
+
+        $this->assertStringContainsString('state='.urlencode('/booking'), $url);
+    }
+
+    public function test_redirect_drops_a_return_path_that_isnt_a_safe_relative_path(): void
+    {
+        $this->configureGoogle();
+
+        foreach (['https://evil.example/phish', '//evil.example', '/ok\\..\\evil'] as $unsafe) {
+            $url = $this->getJson('/api/account/google/redirect?redirect_to='.urlencode($unsafe))->assertOk()->json('url');
+
+            $this->assertStringNotContainsString(urlencode($unsafe), $url);
+        }
+    }
+
+    public function test_callback_forwards_the_return_path_from_state_to_the_frontend(): void
+    {
+        $this->configureGoogle();
+        Socialite::fake('google', SocialiteUser::fake([
+            'id' => 'google-return-1',
+            'email' => 'returning@example.com',
+        ]));
+
+        $response = $this->get('/api/account/google/callback?state='.urlencode('/booking'));
+
+        $response->assertRedirect();
+        $location = $response->headers->get('Location');
+        $this->assertStringContainsString('&redirect_to='.urlencode('/booking'), $location);
+    }
+
+    public function test_callback_never_forwards_an_unsafe_state_as_the_return_path(): void
+    {
+        $this->configureGoogle();
+        Socialite::fake('google', SocialiteUser::fake([
+            'id' => 'google-return-2',
+            'email' => 'returning2@example.com',
+        ]));
+
+        $response = $this->get('/api/account/google/callback?state='.urlencode('https://evil.example/phish'));
+
+        $response->assertRedirect();
+        $location = $response->headers->get('Location');
+        $this->assertStringNotContainsString('redirect_to=', $location);
+    }
+
     public function test_callback_creates_a_new_customer_account_for_a_brand_new_google_identity(): void
     {
         $this->configureGoogle();

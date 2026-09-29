@@ -36,7 +36,21 @@ class GoogleAuthController extends Controller
         return rtrim(config('salon.frontend_url'), '/').$path;
     }
 
-    public function redirect(): JsonResponse
+    /**
+     * Where the SPA should land after sign-in completes (e.g. "/booking" to
+     * resume a booking in progress) — only ever a same-origin relative path,
+     * never something that could carry the browser off to another host.
+     */
+    private function safeReturnPath(?string $path): ?string
+    {
+        if (! $path || ! str_starts_with($path, '/') || str_starts_with($path, '//') || str_contains($path, '\\')) {
+            return null;
+        }
+
+        return $path;
+    }
+
+    public function redirect(Request $request): JsonResponse
     {
         if (! $this->configured()) {
             return response()->json([
@@ -44,7 +58,18 @@ class GoogleAuthController extends Controller
             ], 422);
         }
 
-        $url = Socialite::driver('google')->stateless()->redirect()->getTargetUrl();
+        $driver = Socialite::driver('google')->stateless();
+
+        // Round-tripped through Google's own `state` param (echoed back
+        // verbatim in the callback) rather than sessionStorage: the browser
+        // can leave on www.dkstylehub.com and come back on dkstylehub.com (or
+        // vice versa) mid-flow — sessionStorage doesn't survive that since
+        // it's locked to one origin, but Google's state does.
+        if ($returnTo = $this->safeReturnPath($request->query('redirect_to'))) {
+            $driver->with(['state' => $returnTo]);
+        }
+
+        $url = $driver->redirect()->getTargetUrl();
 
         return response()->json(['url' => $url]);
     }
@@ -132,6 +157,11 @@ class GoogleAuthController extends Controller
 
         $token = $user->createToken('customer-google')->plainTextToken;
 
-        return redirect()->away($this->frontendUrl('/auth/google/callback?token='.$token));
+        $callback = '/auth/google/callback?token='.$token;
+        if ($returnTo = $this->safeReturnPath($request->query('state'))) {
+            $callback .= '&redirect_to='.urlencode($returnTo);
+        }
+
+        return redirect()->away($this->frontendUrl($callback));
     }
 }
