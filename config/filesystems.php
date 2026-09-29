@@ -33,16 +33,25 @@ return [
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),
-            'serve' => true,
             'throw' => false,
             'report' => false,
         ],
 
+        // 'serve' registers Laravel's own "storage/{path}" route (see
+        // Illuminate\Filesystem\FilesystemServiceProvider::serveFiles()) that
+        // reads straight from this disk — the fallback for hosting where
+        // `php artisan storage:link` was never run (no SSH access to create
+        // it, and it wouldn't survive a copy-based redeploy either way).
+        // 'local' above doesn't also set this: both disks would otherwise
+        // fight over the same implicit "/storage" URI and the app would
+        // refuse to boot ("disk conflicts with disk at [/storage]") — and
+        // nothing in this app serves from the private disk regardless.
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),
             'url' => rtrim(env('APP_URL', 'http://localhost'), '/').'/storage',
             'visibility' => 'public',
+            'serve' => true,
             'throw' => false,
             'report' => false,
         ],
