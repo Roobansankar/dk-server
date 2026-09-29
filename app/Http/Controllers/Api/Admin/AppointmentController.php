@@ -29,7 +29,8 @@ class AppointmentController extends Controller
             'direction' => ['sometimes', 'in:asc,desc'],
         ]);
 
-        $sort = $request->string('sort', 'appointment_date')->value();
+        // Default: newest request first (creation time, not the scheduled slot).
+        $sort = $request->string('sort', 'created_at')->value();
         $direction = $request->string('direction', 'desc')->value();
 
         $appointments = AppointmentFilters::apply(Appointment::query(), $request)
@@ -38,6 +39,7 @@ class AppointmentController extends Controller
                 fn ($q) => $q->orderBy('created_at', $direction),
                 fn ($q) => $q->orderBy('appointment_date', $direction)->orderBy('appointment_time', $direction),
             )
+            ->orderBy('id', $direction)
             ->paginate($request->integer('per_page', 25))
             ->withQueryString();
 

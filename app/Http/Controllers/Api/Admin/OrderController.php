@@ -21,6 +21,7 @@ class OrderController extends Controller
     {
         $orders = $this->filtered($request)
             ->with('items.selectedProducts')
+            ->latest()
             ->latest('id')
             ->paginate($request->integer('per_page', 25));
 
