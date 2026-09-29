@@ -14,7 +14,7 @@
     .logo { width: 128px; }
     .tagline { margin-top: 2px; font-size: 8px; font-weight: bold; letter-spacing: 2.6px; color: #c9a668; text-transform: uppercase; }
     .doc-title { font-family: 'DejaVu Serif', serif; font-size: 27px; letter-spacing: 6px; text-transform: uppercase; text-align: right; color: #e8dcc0; }
-    .doc-ref { margin-top: 9px; text-align: right; font-size: 9.5px; letter-spacing: 0.3px; color: #a89f8a; }
+    .doc-ref { margin-top: 9px; text-align: right; font-size: 9.5px; letter-spacing: 0.3px; color: #c4baa1; }
     .badge { display: inline-block; margin-top: 12px; padding: 5px 15px; border-radius: 12px; border: 1px solid #3f8f6a; background: rgba(64,143,106,0.16); color: #5fcb9a; font-size: 8.5px; font-weight: bold; letter-spacing: 1.6px; }
     .badge.pending { border-color: #b3862e; background: rgba(179,134,46,0.16); color: #dcab52; }
     .right { text-align: right; }
@@ -81,10 +81,10 @@
     /* Footer on every page. The negative bottom exactly cancels the @page
        bottom margin above, so the band sits flush with the true page edge
        instead of leaving a sliver of white below it. */
-    .footer { position: fixed; bottom: -98px; left: 0; right: 0; background: #14120f; color: #cfc7b4; }
+    .footer { position: fixed; bottom: -98px; left: 0; right: 0; background: #14120f; color: #e2dac8; }
     .footer table { width: 100%; border-collapse: collapse; }
     .footer td { padding: 14px 44px 0; font-size: 8.5px; vertical-align: top; line-height: 1.5; }
     .footer .info { width: 70%; }
     .footer .script { width: 30%; white-space: nowrap; text-align: right; font-family: 'DejaVu Serif', serif; font-style: italic; font-size: 11px; color: #e8dcc0; }
-    .footer .terms { padding: 9px 44px 14px; font-size: 7.5px; color: #8a8371; border-top: 1px solid #2b2823; margin-top: 10px; }
+    .footer .terms { padding: 9px 44px 14px; font-size: 7.5px; color: #c4baa1; border-top: 1px solid #3a362f; margin-top: 10px; }
 </style>
