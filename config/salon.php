@@ -34,19 +34,23 @@ return [
     |
     | `max_kb` is the application-level ceiling (default 25 MB) — larger
     | files are rejected with a validation message naming the limit (see
-    | Store/UpdateVideoRequest). App\Support\VideoUploader stores whatever
-    | comes through under it exactly as uploaded, with no compression — see
-    | that class's docblock for why (shared hosting can't reliably offer
-    | ffmpeg/proc_open). The server's own PHP upload_max_filesize/
-    | post_max_size must still be larger than max_kb (an infrastructure
-    | setting, not an app one — see DEPLOYMENT.md), otherwise PHP rejects the
-    | file before Laravel's validation runs. `mimes` is still enforced.
+    | Store/UpdateVideoRequest). Whatever comes through under it is
+    | transcoded/compressed by App\Support\VideoUploader regardless of size,
+    | so there's no fixed size below that this app needs to guard. The
+    | server's own PHP upload_max_filesize/post_max_size must still be larger
+    | than max_kb (an infrastructure setting, not an app one — see
+    | DEPLOYMENT.md), otherwise PHP rejects the file before Laravel's
+    | validation runs. `mimes` is still enforced. `ffmpeg_path` /
+    | `ffprobe_path` default to relying on $PATH; override only if the
+    | binaries live somewhere non-standard.
     |
     */
 
     'video_uploads' => [
         'mimes' => ['mp4', 'mov', 'webm', 'mkv', 'avi'],
         'max_kb' => (int) env('VIDEO_MAX_KB', 25600),
+        'ffmpeg_path' => env('FFMPEG_PATH', 'ffmpeg'),
+        'ffprobe_path' => env('FFPROBE_PATH', 'ffprobe'),
     ],
 
     /*

@@ -1,5 +1,6 @@
 <?php
 
+use App\Exceptions\VideoProcessingException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -46,6 +47,15 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(function (AuthenticationException $e, Request $request) {
             if ($request->is('api/*') || $request->expectsJson()) {
                 return response()->json(['message' => 'Unauthenticated.'], 401);
+            }
+        });
+
+        // VideoUploader throws this for environment problems (ffmpeg/
+        // proc_open/storage) — its message is already written to be safe to
+        // show an admin, unlike Laravel's default 500 body in production.
+        $exceptions->render(function (VideoProcessingException $e, Request $request) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return response()->json(['message' => $e->getMessage()], 503);
             }
         });
 
