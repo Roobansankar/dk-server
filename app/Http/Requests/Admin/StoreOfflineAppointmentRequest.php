@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Admin;
 
 use App\Models\Appointment;
+use App\Models\PricingPlan;
 use App\Models\Service;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -26,8 +27,13 @@ class StoreOfflineAppointmentRequest extends FormRequest
             'customer_name' => ['required', 'string', 'max:120'],
             'phone' => ['required', 'string', 'max:30', 'regex:/^[0-9+\-\s()]{6,30}$/'],
             'gender' => ['required', 'string', Rule::in(['male', 'female', 'unisex'])],
-            'category_id' => ['required', 'integer', Rule::exists('service_categories', 'id')->where('status', true)],
-            'service_id' => ['required', 'integer', Rule::exists('services', 'id')->where('status', true)],
+            // Either a service (category → service) or a Combo Offer (pricing_plan_id).
+            'category_id' => ['required_without:pricing_plan_id', 'nullable', 'integer', Rule::exists('service_categories', 'id')->where('status', true)],
+            'service_id' => ['required_without:pricing_plan_id', 'nullable', 'integer', Rule::exists('services', 'id')->where('status', true)],
+            'pricing_plan_id' => [
+                'nullable', 'integer', 'prohibits:service_id',
+                Rule::exists('pricing_plans', 'id')->where('status', true)->whereNull('deleted_at'),
+            ],
             'stylist_id' => ['required', 'integer', Rule::exists('stylists', 'id')->where('status', true)],
             // Staff may backdate a walk-in that already happened.
             'appointment_date' => ['required', 'date'],
@@ -47,6 +53,14 @@ class StoreOfflineAppointmentRequest extends FormRequest
                 return;
             }
 
+            if ($this->filled('pricing_plan_id')) {
+                if (! PricingPlan::find($this->integer('pricing_plan_id'))?->duration_minutes) {
+                    $validator->errors()->add('pricing_plan_id', 'Set a time on this plan (Pricing Plans → Edit) before booking it.');
+                }
+
+                return;
+            }
+
             $service = Service::find($this->integer('service_id'));
 
             if (! $service || $service->service_category_id !== $this->integer('category_id')) {
@@ -60,6 +74,7 @@ class StoreOfflineAppointmentRequest extends FormRequest
         return [
             'category_id' => 'category',
             'service_id' => 'service',
+            'pricing_plan_id' => 'combo offer',
             'stylist_id' => 'stylist',
         ];
     }

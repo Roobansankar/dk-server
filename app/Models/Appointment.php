@@ -49,6 +49,9 @@ class Appointment extends Model
 
     public const SOURCES = [self::SOURCE_ONLINE, self::SOURCE_OFFLINE];
 
+    /** category_name snapshotted onto a Combo Offer appointment. */
+    public const COMBO_CATEGORY_NAME = 'Combo Offer';
+
     protected $fillable = [
         'reference',
         'user_id',
@@ -58,6 +61,7 @@ class Appointment extends Model
         'source',
         'service_category_id',
         'service_id',
+        'pricing_plan_id',
         'stylist_id',
         'category_name',
         'service_name',
@@ -133,6 +137,25 @@ class Appointment extends Model
         $this->advance_amount = $terms['advance_amount'];
     }
 
+    /**
+     * Copy a Combo Offer (a Pricing Plan — the public "Combo Offers" are
+     * pricing plans) onto the appointment instead of a service: category
+     * "Combo Offer", the plan's name, price and duration. Plans carry no
+     * advance: 0% (the column's NOT NULL default) and no advance amount.
+     */
+    public function applyPricingPlanSnapshot(PricingPlan $plan): void
+    {
+        $this->pricing_plan_id = $plan->id;
+        $this->service_id = null;
+        $this->service_category_id = null;
+        $this->category_name = self::COMBO_CATEGORY_NAME;
+        $this->service_name = $plan->name;
+        $this->duration_minutes = $plan->duration_minutes;
+        $this->service_price = $plan->price;
+        $this->advance_percentage = 0;
+        $this->advance_amount = null;
+    }
+
     /** Snapshot the chosen stylist. Null = "any available stylist". */
     public function applyStylistSnapshot(?Stylist $stylist): void
     {
@@ -180,6 +203,11 @@ class Appointment extends Model
     public function service(): BelongsTo
     {
         return $this->belongsTo(Service::class);
+    }
+
+    public function pricingPlan(): BelongsTo
+    {
+        return $this->belongsTo(PricingPlan::class)->withTrashed();
     }
 
     public function stylist(): BelongsTo

@@ -247,6 +247,8 @@ Route::prefix('admin')->middleware(['auth:sanctum'])->group(function () {
     Route::get('appointments', [AdminAppointmentController::class, 'index'])->middleware('permission:appointments.view');
     Route::get('appointments/export', [AdminAppointmentController::class, 'export'])->middleware('permission:appointments.view');
     Route::post('appointments', [AdminAppointmentController::class, 'store'])->middleware('permission:appointments.offline');
+    // Offline form: free times for a Combo Offer (pricing plan), sized by the plan's duration.
+    Route::get('appointments/combo-slots', [AdminAppointmentController::class, 'comboSlots'])->middleware('permission:appointments.offline');
     Route::get('appointments/{appointment}', [AdminAppointmentController::class, 'show'])->middleware('permission:appointments.view');
     // Bill / invoice PDF for one appointment (paid-in-full stamp when paid).
     Route::get('appointments/{appointment}/bill', [AdminAppointmentController::class, 'bill'])->middleware('permission:appointments.view');

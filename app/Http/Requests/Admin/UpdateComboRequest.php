@@ -29,6 +29,8 @@ class UpdateComboRequest extends FormRequest
             'description' => ['sometimes', 'nullable', 'string', 'max:2000'],
             'bundle_price' => ['sometimes', 'nullable', 'numeric', 'min:0', 'max:9999999.99'],
             'tax_percent' => ['sometimes', 'numeric', 'min:0', 'max:100'],
+            // The combo's own time needed (minutes) — independent of pricing plans.
+            'duration_minutes' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:1440'],
             'image' => [
                 'sometimes', 'file', 'image',
                 'mimes:'.implode(',', config('salon.uploads.mimes')),

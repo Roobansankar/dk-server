@@ -15,6 +15,7 @@ class PricingPlan extends Model
         'slug',
         'description',
         'price',
+        'duration_minutes',
         'validity_days',
         'features',
         'status',
@@ -25,6 +26,7 @@ class PricingPlan extends Model
     {
         return [
             'price' => 'decimal:2',
+            'duration_minutes' => 'integer',
             'validity_days' => 'integer',
             'features' => 'array',
             'status' => 'boolean',

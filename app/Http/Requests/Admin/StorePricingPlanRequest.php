@@ -17,6 +17,7 @@ class StorePricingPlanRequest extends FormRequest
             'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:2000'],
             'price' => ['required', 'numeric', 'min:0', 'max:9999999.99'],
+            'duration_minutes' => ['nullable', 'integer', 'min:1', 'max:1440'],
             'validity_days' => ['nullable', 'integer', 'min:1', 'max:3650'],
             'features' => ['sometimes', 'array', 'max:50'],
             'features.*' => ['string', 'max:255'],

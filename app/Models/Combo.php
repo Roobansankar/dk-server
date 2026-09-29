@@ -27,6 +27,7 @@ class Combo extends Model
         'description',
         'bundle_price',
         'tax_percent',
+        'duration_minutes',
         'image_path',
         'status',
         'sort_order',
@@ -42,6 +43,7 @@ class Combo extends Model
         return [
             'bundle_price' => 'decimal:2',
             'tax_percent' => 'decimal:2',
+            'duration_minutes' => 'integer',
             'status' => 'boolean',
             'sort_order' => 'integer',
         ];

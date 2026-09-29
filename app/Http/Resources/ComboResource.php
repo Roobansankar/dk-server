@@ -17,6 +17,7 @@ class ComboResource extends JsonResource
             'description' => $this->description,
             'bundle_price' => $this->bundle_price !== null ? (float) $this->bundle_price : null,
             'tax_percent' => $this->tax_percent !== null ? (float) $this->tax_percent : 0,
+            'duration_minutes' => $this->duration_minutes,
             // The cover — always the first of `images` — for cards and lists.
             'image_url' => ImageUploader::url($this->image_path),
             // Up to four photos, in the order the detail page shows them.

@@ -29,6 +29,8 @@ class StoreComboRequest extends FormRequest
             'description' => ['nullable', 'string', 'max:2000'],
             'bundle_price' => ['nullable', 'numeric', 'min:0', 'max:9999999.99'],
             'tax_percent' => ['sometimes', 'numeric', 'min:0', 'max:100'],
+            // The combo's own time needed (minutes) — independent of pricing plans.
+            'duration_minutes' => ['nullable', 'integer', 'min:1', 'max:1440'],
             'image' => [
                 'nullable', 'file', 'image',
                 'mimes:'.implode(',', config('salon.uploads.mimes')),

@@ -21,6 +21,8 @@ class AppointmentResource extends JsonResource
             'source' => $this->source,
             'category_id' => $this->service_category_id,
             'service_id' => $this->service_id,
+            // Set when this is a Combo Offer (pricing plan) booking — category_name "Combo Offer".
+            'pricing_plan_id' => $this->pricing_plan_id,
             'stylist_id' => $this->stylist_id,
             'category_name' => $this->category_name,
             'service_name' => $this->service_name,

@@ -7,12 +7,14 @@ use App\Http\Requests\Admin\StoreOfflineAppointmentRequest;
 use App\Http\Requests\Admin\UpdateAppointmentRequest;
 use App\Http\Resources\AppointmentResource;
 use App\Models\Appointment;
+use App\Models\PricingPlan;
 use App\Models\Service;
 use App\Models\Stylist;
 use App\Support\AppointmentFilters;
 use App\Support\AppointmentSlots;
 use App\Support\AppointmentsWorkbook;
 use App\Support\BillPdf;
+use App\Support\BookingAvailability;
 use App\Support\WhatsApp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -75,20 +77,25 @@ class AppointmentController extends Controller
      * When it is created already-confirmed (the default), the same slot-locking
      * rules as an online confirmation apply: an overlapping confirmed appointment
      * for the same stylist is rejected.
+     *
+     * A Combo Offer (pricing_plan_id instead of category/service) goes through
+     * the same flow; the plan's name / price / duration are snapshotted and its
+     * duration is what the slot check reserves.
      */
     public function store(StoreOfflineAppointmentRequest $request)
     {
-        $service = Service::with('category')->findOrFail($request->integer('service_id'));
+        $plan = $request->filled('pricing_plan_id') ? PricingPlan::findOrFail($request->integer('pricing_plan_id')) : null;
+        $service = $plan ? null : Service::with('category')->findOrFail($request->integer('service_id'));
         $stylist = $request->filled('stylist_id') ? Stylist::find($request->integer('stylist_id')) : null;
         $status = $request->input('status', Appointment::STATUS_CONFIRMED);
 
-        $appointment = DB::transaction(function () use ($request, $service, $stylist, $status) {
+        $appointment = DB::transaction(function () use ($request, $service, $plan, $stylist, $status) {
             if ($status === Appointment::STATUS_CONFIRMED) {
                 $this->assertSlotIsFree(
                     $stylist?->id,
                     $request->date('appointment_date'),
                     $request->string('appointment_time')->value(),
-                    $service->duration_minutes,
+                    $plan ? $plan->duration_minutes : $service->duration_minutes,
                 );
             }
 
@@ -105,7 +112,11 @@ class AppointmentController extends Controller
                 'payment_status' => $request->input('payment_status', Appointment::PAYMENT_UNPAID),
                 'payment_method' => $request->input('payment_method'),
             ]);
-            $appointment->applyServiceSnapshot($service, $stylist);
+            if ($plan) {
+                $appointment->applyPricingPlanSnapshot($plan);
+            } else {
+                $appointment->applyServiceSnapshot($service, $stylist);
+            }
             $appointment->applyStylistSnapshot($stylist);
             $appointment->save();
 
@@ -117,6 +128,27 @@ class AppointmentController extends Controller
         return (new AppointmentResource($appointment))
             ->additional(['message' => 'Offline appointment created.'])
             ->response()->setStatusCode(201);
+    }
+
+    /**
+     * Free start times for a Combo Offer (pricing plan) with one stylist on one
+     * date — the offline form's time picker. Same rules as /booking/slots for a
+     * service, but sized by the plan's duration.
+     */
+    public function comboSlots(Request $request)
+    {
+        $validated = $request->validate([
+            'pricing_plan_id' => ['required', 'integer', Rule::exists('pricing_plans', 'id')->where('status', true)->whereNull('deleted_at')],
+            'stylist_id' => ['required', 'integer', Rule::exists('stylists', 'id')->where('status', true)],
+            'date' => ['required', 'date_format:Y-m-d'],
+        ]);
+
+        $plan = PricingPlan::findOrFail($validated['pricing_plan_id']);
+        $stylist = Stylist::findOrFail($validated['stylist_id']);
+
+        return response()->json([
+            'data' => BookingAvailability::slotsForDuration((int) $plan->duration_minutes, $validated['date'], $stylist),
+        ]);
     }
 
     public function show(Appointment $appointment)

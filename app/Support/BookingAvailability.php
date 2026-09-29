@@ -182,9 +182,25 @@ class BookingAvailability
      */
     public static function slots(Service $service, ?Stylist $stylist, string $dateIso): array
     {
+        return self::slotsForDuration(
+            (int) $service->duration_minutes,
+            $dateIso,
+            $stylist,
+            fn () => self::eligibleStylists($service),
+        );
+    }
+
+    /**
+     * The same computation for any appointment length (e.g. a Combo Offer's
+     * own duration). Without $stylist, $eligible supplies the candidates.
+     *
+     * @param  (callable(): Collection)|null  $eligible
+     * @return array{date: string, working: bool, today_exhausted: bool, slots: array<int, array{start: string, end: string, status: string}>}
+     */
+    public static function slotsForDuration(int $duration, string $dateIso, ?Stylist $stylist, ?callable $eligible = null): array
+    {
         $result = ['date' => $dateIso, 'working' => false, 'today_exhausted' => false, 'slots' => []];
 
-        $duration = (int) $service->duration_minutes;
         $now = Carbon::now(self::TZ);
 
         if ($duration < 1 || $dateIso < $now->toDateString()) {
@@ -193,7 +209,7 @@ class BookingAvailability
 
         $candidates = $stylist
             ? collect([$stylist])
-            : self::eligibleStylists($service);
+            : ($eligible ? $eligible() : collect());
 
         $floorAt = AppointmentSlots::earliestBookableTime(Carbon::parse($dateIso, self::TZ)->startOfDay(), $now);
         $floor = $floorAt ? $floorAt->hour * 60 + $floorAt->minute : null;

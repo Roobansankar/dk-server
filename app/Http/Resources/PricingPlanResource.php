@@ -15,6 +15,7 @@ class PricingPlanResource extends JsonResource
             'slug' => $this->slug,
             'description' => $this->description,
             'price' => (float) $this->price,
+            'duration_minutes' => $this->duration_minutes,
             'validity_days' => $this->validity_days,
             'features' => $this->features ?? [],
             'status' => $this->status,
