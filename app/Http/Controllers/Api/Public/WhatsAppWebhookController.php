@@ -154,7 +154,7 @@ class WhatsAppWebhookController extends Controller
         return is_scalar($value) ? (string) $value : null;
     }
 
-    /** "918072427484" → "…1709": enough to recognise a number, not to expose it. */
+    /** "919944381709" → "…1709": enough to recognise a number, not to expose it. */
     private static function mask(mixed $number): ?string
     {
         $digits = preg_replace('/\D+/', '', (string) self::text($number));

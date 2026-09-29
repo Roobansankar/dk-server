@@ -113,7 +113,7 @@ class WhatsAppWebhookTest extends TestCase
         $this->push($this->statusPayload([
             'id' => 'wamid.ABC',
             'status' => 'failed',
-            'recipient_id' => '918072427484',
+            'recipient_id' => '919944381709',
             'errors' => [['code' => 131026, 'title' => 'Message undeliverable', 'error_data' => ['details' => 'Recipient is not a valid WhatsApp user']]],
         ]))->assertOk();
 
@@ -123,7 +123,7 @@ class WhatsAppWebhookTest extends TestCase
                 && $context['to'] === '…1709'
                 && $context['errors'][0]['code'] === 131026
                 && $context['errors'][0]['details'] === 'Recipient is not a valid WhatsApp user'
-                && ! str_contains(json_encode($context), '918072427484');
+                && ! str_contains(json_encode($context), '919944381709');
         })->once();
     }
 
@@ -131,7 +131,7 @@ class WhatsAppWebhookTest extends TestCase
     {
         Log::spy();
 
-        $this->push($this->statusPayload(['id' => 'wamid.ABC', 'status' => 'delivered', 'recipient_id' => '918072427484']))->assertOk();
+        $this->push($this->statusPayload(['id' => 'wamid.ABC', 'status' => 'delivered', 'recipient_id' => '919944381709']))->assertOk();
 
         Log::shouldHaveReceived('info')->withArgs(
             fn (string $message, array $context) => $message === 'WhatsApp message status.' && $context['status'] === 'delivered'
@@ -146,7 +146,7 @@ class WhatsAppWebhookTest extends TestCase
         $this->push([
             'object' => 'whatsapp_business_account',
             'entry' => [['changes' => [['field' => 'messages', 'value' => ['messages' => [[
-                'from' => '918072427484', 'id' => 'wamid.IN', 'type' => 'text', 'text' => ['body' => 'my private message'],
+                'from' => '919944381709', 'id' => 'wamid.IN', 'type' => 'text', 'text' => ['body' => 'my private message'],
             ]]]]]]],
         ])->assertOk();
 
@@ -155,7 +155,7 @@ class WhatsAppWebhookTest extends TestCase
                 && $context['from'] === '…1709'
                 && $context['type'] === 'text'
                 && ! str_contains(json_encode($context), 'my private message')
-                && ! str_contains(json_encode($context), '918072427484');
+                && ! str_contains(json_encode($context), '919944381709');
         })->once();
     }
 

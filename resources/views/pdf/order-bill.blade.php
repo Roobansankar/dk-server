@@ -87,12 +87,6 @@
                         </tr>
                     </table>
 
-                    @if ($paid)
-                        <div class="paid-via">
-                            <span class="tick">&#10003;</span> <b>Payment method</b> &mdash; Paid online via Razorpay
-                        </div>
-                    @endif
-
                     <p class="note">Prices shown include applicable taxes.</p>
                 </td>
             </tr>

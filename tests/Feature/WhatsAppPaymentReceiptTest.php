@@ -315,7 +315,7 @@ class WhatsAppPaymentReceiptTest extends TestCase
 
         $this->setPayment($appointment, 'paid')->assertOk();
 
-        $this->assertSame('918072427484', $this->messages()[0]['to']);
+        $this->assertSame('919944381709', $this->messages()[0]['to']);
     }
 
     // --- Created through the Offline Appointment form -----------------------------

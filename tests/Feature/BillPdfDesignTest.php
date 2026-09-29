@@ -188,13 +188,37 @@ class BillPdfDesignTest extends TestCase
             'balance_payment_method' => 'cash',
         ]));
 
-        $this->assertStringContainsString('Advance paid (Online)', $html);
-        $this->assertStringContainsString('Balance paid (Cash)', $html);
+        $this->assertStringContainsString('Advance paid', $html);
+        $this->assertStringContainsString('Balance paid', $html);
         $this->assertStringContainsString('Amount received', $html);
         $this->assertStringNotContainsString('Balance due', $html);
+        // The payment method (cash/UPI/card) is deliberately never named.
+        $this->assertStringNotContainsString('Cash', $html);
+        $this->assertStringNotContainsString('Paid via', $html);
         // advance ₹300 + balance ₹1,200 = the ₹1,500 service price.
         $this->assertStringContainsString('&#8377; 300.00', $html);
         $this->assertStringContainsString('&#8377; 1,200.00', $html);
+    }
+
+    public function test_a_settled_offline_advance_then_balance_is_also_itemised(): void
+    {
+        // A walk-in who paid a deposit, then settled the rest on a later visit —
+        // same idea as the online case, but there's only one payment_method
+        // field for offline appointments, so it doubles as "however the
+        // balance was collected" once the bill is marked paid.
+        $html = $this->billHtml($this->appointment([
+            'source' => 'offline',
+            'advance_amount' => 300,
+            'payment_method' => 'upi',
+        ]));
+
+        $this->assertStringContainsString('Advance paid', $html);
+        $this->assertStringContainsString('Balance paid', $html);
+        $this->assertStringContainsString('Amount received', $html);
+        $this->assertStringNotContainsString('Balance due', $html);
+        // The payment method (cash/UPI/card) is deliberately never named.
+        $this->assertStringNotContainsString('UPI', $html);
+        $this->assertStringNotContainsString('Paid via', $html);
     }
 
     public function test_a_still_owed_two_part_payment_shows_the_advance_and_what_remains(): void
@@ -205,7 +229,7 @@ class BillPdfDesignTest extends TestCase
             'advance_amount' => 300,
         ]));
 
-        $this->assertStringContainsString('Advance paid (Online)', $html);
+        $this->assertStringContainsString('Advance paid', $html);
         $this->assertStringContainsString('Balance due', $html);
         $this->assertStringNotContainsString('Balance paid', $html);
     }
@@ -218,7 +242,8 @@ class BillPdfDesignTest extends TestCase
         $this->assertStringContainsString('Amount received', $html);
         $this->assertStringNotContainsString('Advance paid', $html);
         $this->assertStringNotContainsString('Balance paid', $html);
-        $this->assertStringContainsString('Paid via Online', $html);
+        // No payment-method box at all, split or not.
+        $this->assertStringNotContainsString('Paid via', $html);
     }
 
     public function test_the_bill_date_is_the_studios_time_not_the_servers_utc(): void

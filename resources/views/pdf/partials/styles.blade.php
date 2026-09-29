@@ -60,10 +60,6 @@
     table.totals tr.grand td:first-child { border-radius: 4px 0 0 4px; }
     table.totals tr.grand td:last-child { border-radius: 0 4px 4px 0; }
 
-    .paid-via { margin-top: 12px; padding: 9px 11px; border-radius: 6px; background: #faf7f0; font-size: 9.5px; color: #4a4740; }
-    .paid-via .tick { color: #23503a; font-weight: bold; }
-    .paid-via b { color: #201e1b; }
-
     /* Extras: stacked boxes to the left of the totals */
     .box { border-radius: 6px; padding: 11px 13px; font-size: 9px; line-height: 1.55; }
     .box + .box { margin-top: 10px; }

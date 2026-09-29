@@ -15,27 +15,16 @@
             ? '—'
             : $start->format('h:i A').($minutes > 0 ? ' – '.$start->copy()->addMinutes($minutes)->format('h:i A') : '');
 
-        // How this was paid — only stated when it's unambiguous. The advance on an
-        // online booking is always Razorpay; only the method staff later collected
-        // the balance in, if any, is worth a single clear line.
-        $methodLabel = fn ($m) => ['upi' => 'UPI', 'cash' => 'Cash', 'card' => 'Card'][$m] ?? null;
-
-        // A genuine two-part payment — an advance taken online, then a balance
-        // collected separately — worth itemising instead of one lump "Amount
-        // received". Paying the whole price as the "advance" (no separate
-        // balance) isn't a split; that's just a single online payment.
+        // A genuine two-part payment — an advance taken up front, then a balance
+        // collected separately (whether that's Razorpay-then-studio for an online
+        // booking, or two visits for a walk-in) — worth itemising instead of one
+        // lump "Amount received". Paying the whole price as the "advance" (no
+        // separate balance) isn't a split; that's just a single payment. The
+        // method it was paid in (cash/UPI/card) is deliberately not shown.
         $advance = (float) ($appointment->advance_amount ?? 0);
         $servicePrice = (float) ($appointment->service_price ?? 0);
         $balancePortion = round(max(0, $servicePrice - $advance), 2);
-        $showSplit = $appointment->source !== 'offline' && $advance > 0 && $balancePortion > 0;
-        $balanceMethodLabel = $methodLabel($appointment->balance_payment_method);
-
-        $paidVia = null;
-        if ($paidInFull && $appointment->source === 'offline' && $methodLabel($appointment->payment_method)) {
-            $paidVia = $methodLabel($appointment->payment_method);
-        } elseif ($paidInFull && $appointment->source !== 'offline' && ! $showSplit) {
-            $paidVia = $methodLabel($appointment->balance_payment_method) ?? 'Online';
-        }
+        $showSplit = $advance > 0 && $balancePortion > 0;
 
         $instagramHandle = ! empty($instagramUrl) ? trim(parse_url($instagramUrl, PHP_URL_PATH) ?? '', '/') : null;
     @endphp
@@ -119,12 +108,12 @@
                         </tr>
                         @if ($showSplit)
                             <tr>
-                                <td>Advance paid (Online)</td>
+                                <td>Advance paid</td>
                                 <td class="num">{!! $inr($advance) !!}</td>
                             </tr>
                             @if ($paidInFull)
                                 <tr>
-                                    <td>Balance paid{{ $balanceMethodLabel ? " ({$balanceMethodLabel})" : '' }}</td>
+                                    <td>Balance paid</td>
                                     <td class="num">{!! $inr($balancePortion) !!}</td>
                                 </tr>
                                 <tr>
@@ -150,12 +139,6 @@
                             @endif
                         @endif
                     </table>
-
-                    @if ($paidVia)
-                        <div class="paid-via">
-                            <span class="tick">&#10003;</span> <b>Payment method</b> &mdash; Paid via {{ $paidVia }}
-                        </div>
-                    @endif
                 </td>
             </tr>
         </table>
