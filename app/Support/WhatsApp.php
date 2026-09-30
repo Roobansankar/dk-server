@@ -78,7 +78,7 @@ class WhatsApp
         $template = (string) config('services.whatsapp.template', 'booking_confirmed');
         $lang = (string) config('services.whatsapp.language', 'en');
 
-        $date = $appointment->appointment_date?->toDateString() ?? '';
+        $date = self::templateDate($appointment);
 
         // Must match {{1}}…{{6}} order in your approved template body exactly.
         $params = [
@@ -91,6 +91,45 @@ class WhatsApp
         ];
 
         return self::sendTemplate($to, $template, $lang, $params);
+    }
+
+    /**
+     * Send the just-booked template for an offline appointment created
+     * confirmed + unpaid (no amount involved). Params {{1}}…{{6}}:
+     * name, service, date, time slot, reference, stylist.
+     * Never throws — returns true on success, false otherwise (logged).
+     */
+    public static function sendBookingBooked(Appointment $appointment): bool
+    {
+        $to = self::recipientFor($appointment);
+        if ($to === null) {
+            return false;
+        }
+
+        $template = (string) config('services.whatsapp.template_booked', 'appointment_booked2');
+        $lang = (string) config('services.whatsapp.language', 'en');
+
+        $date = self::templateDate($appointment);
+
+        $params = [
+            (string) ($appointment->customer_name ?? 'Guest'),
+            (string) ($appointment->service_name ?? 'your service'),
+            $date,
+            self::timeRange($appointment),
+            (string) ($appointment->reference ?? ''),
+            (string) ($appointment->stylist_name ?: $appointment->stylist?->name ?: 'Any available'),
+        ];
+
+        return self::sendTemplate($to, $template, $lang, $params);
+    }
+
+    /**
+     * The appointment date as the customer should read it: day-month-year
+     * ("05-10-2026"). Every customer/owner template uses this — never Y-m-d.
+     */
+    private static function templateDate(Appointment $appointment): string
+    {
+        return $appointment->appointment_date?->format('d-m-Y') ?? '';
     }
 
     /**
@@ -226,7 +265,7 @@ class WhatsApp
      *
      * Params must match {{1}}…{{7}} order exactly:
      * {{1}} customer name, {{2}} customer phone, {{3}} service,
-     * {{4}} appointment date (Y-m-d), {{5}} time slot, {{6}} reference,
+     * {{4}} appointment date (d-m-Y), {{5}} time slot, {{6}} reference,
      * {{7}} stylist name ('Any available' when none assigned).
      * Never throws — returns true on success, false otherwise (logged).
      */
@@ -244,7 +283,7 @@ class WhatsApp
         $template = (string) config('services.whatsapp.template_owner_booking', 'owner_booking_alert_v2');
         $lang = (string) config('services.whatsapp.language', 'en');
 
-        $date = $appointment->appointment_date?->toDateString() ?? '';
+        $date = self::templateDate($appointment);
 
         $params = [
             (string) ($appointment->customer_name ?? 'Guest'),

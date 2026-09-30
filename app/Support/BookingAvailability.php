@@ -191,6 +191,57 @@ class BookingAvailability
     }
 
     /**
+     * Multi-service version: durations are added and ONE combined slot is
+     * shown (the whole block must fit + be free). The professional must offer
+     * EVERY service; "any professional" means anyone offering all of them.
+     * Service names are comma-joined on the snapshot, so WhatsApp lists them.
+     *
+     * @param  Collection<int, Service>  $services
+     * @return array{date: string, working: bool, today_exhausted: bool, slots: array<int, array{start: string, end: string, status: string}>}
+     */
+    public static function slotsForServices(Collection $services, ?Stylist $stylist, string $dateIso): array
+    {
+        $duration = (int) $services->sum('duration_minutes');
+
+        return self::slotsForDuration(
+            $duration,
+            $dateIso,
+            $stylist,
+            fn () => self::eligibleStylistsForAll($services),
+        );
+    }
+
+    /**
+     * Active professionals offering EVERY one of $services, in roster order.
+     *
+     * @param  Collection<int, Service>  $services
+     * @return Collection<int, Stylist>
+     */
+    public static function eligibleStylistsForAll(Collection $services): Collection
+    {
+        $ids = $services->map(fn ($s) => (int) $s->id)->all();
+
+        if ($ids === []) {
+            return collect();
+        }
+
+        return Stylist::query()
+            ->active()
+            ->ordered()
+            ->where(function ($query) use ($ids) {
+                foreach ($ids as $id) {
+                    $query->whereHas('services', fn ($q) => $q->where('services.id', $id));
+                }
+            })
+            ->where(function ($query) {
+                $query
+                    ->whereHas('dateHours', fn ($d) => $d->whereDate('date', '>=', Carbon::now(self::TZ)->toDateString()))
+                    ->orWhereHas('weeklyHours');
+            })
+            ->get();
+    }
+
+    /**
      * The same computation for any appointment length (e.g. a Combo Offer's
      * own duration). Without $stylist, $eligible supplies the candidates.
      *
@@ -315,6 +366,78 @@ class BookingAvailability
 
             if ($candidates->isEmpty()) {
                 return [null, 'No professional currently offers this service. Please contact the studio.'];
+            }
+        }
+
+        $working = false;
+
+        foreach ($candidates as $candidate) {
+            $fits = collect(self::windows($candidate, $dateIso))
+                ->contains(fn ($w) => $w[0] <= $start && $end <= $w[1]);
+
+            if (! $fits) {
+                continue;
+            }
+
+            $working = true;
+
+            if ($lock) {
+                AppointmentSlots::lockDay($candidate->id, $dateIso);
+            }
+
+            $conflict = AppointmentSlots::findConflict(
+                $candidate->id,
+                $dateIso,
+                $time,
+                $duration,
+                null,
+                AppointmentSlots::ONLINE_BUFFER_MINUTES,
+            );
+
+            if (! $conflict) {
+                return [$candidate, null];
+            }
+        }
+
+        if ($stylist) {
+            return [null, $working
+                ? 'That time is no longer available with the selected stylist. Please choose another slot.'
+                : sprintf('%s isn\'t working at that time. Please choose another slot.', $stylist->name)];
+        }
+
+        return [null, 'No professional is available at that time. Please choose another slot.'];
+    }
+
+    /**
+     * Multi-service version of resolve(): the summed duration must fit + be
+     * free, and the professional must offer EVERY service. Returns
+     * [professional, null] on success, or [null, message] otherwise.
+     *
+     * @param  Collection<int, Service>  $services
+     * @return array{0: ?Stylist, 1: ?string}
+     */
+    public static function resolveServices(Collection $services, ?Stylist $stylist, string $dateIso, string $time, bool $lock = false): array
+    {
+        $duration = (int) $services->sum('duration_minutes');
+
+        if ($duration < 1) {
+            return [null, 'These services can\'t be booked online yet. Please contact the studio.'];
+        }
+
+        $start = self::minutes($time);
+        $end = $start + $duration;
+
+        if ($stylist) {
+            $offered = $stylist->services()->whereIn('services.id', $services->map(fn ($s) => (int) $s->id)->all())->count();
+            if ($offered !== $services->count()) {
+                return [null, sprintf('%s doesn\'t offer all the selected services. Please choose another professional or services.', $stylist->name)];
+            }
+            $candidates = collect([$stylist]);
+        } else {
+            $candidates = self::eligibleStylistsForAll($services);
+
+            if ($candidates->isEmpty()) {
+                return [null, 'No professional currently offers all the selected services. Please contact the studio.'];
             }
         }
 

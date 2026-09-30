@@ -51,7 +51,13 @@ class AppointmentController extends Controller
 
     public function store(StoreAppointmentRequest $request): JsonResponse
     {
-        $service = Service::with('category')->findOrFail($request->integer('service_id'));
+        $multi = $request->filled('service_ids');
+        $ids = $multi
+            ? collect($request->input('service_ids'))->map(fn ($id) => (int) $id)->unique()->values()
+            : collect([$request->integer('service_id')]);
+        $services = Service::with('category')->whereIn('id', $ids)->get()
+            ->sortBy(fn ($s) => $ids->search((int) $s->id))->values();
+        $service = $services->firstOrFail();
         $requestedStylist = $request->filled('stylist_id')
             ? Stylist::find($request->integer('stylist_id'))
             : null;
@@ -62,7 +68,7 @@ class AppointmentController extends Controller
         // never claim someone else's account.
         $userId = $request->user()->id;
 
-        $appointment = DB::transaction(function () use ($request, $service, $requestedStylist, $userId) {
+        $appointment = DB::transaction(function () use ($request, $service, $services, $multi, $requestedStylist, $userId) {
             // Decide who takes this booking while holding the professional's
             // whole-day lock, so a concurrent request for the same/overlapping
             // slot serialises here instead of racing past the check (see
@@ -70,13 +76,22 @@ class AppointmentController extends Controller
             // this assigns the first eligible one who is free. The FormRequest
             // ran the same rules unlocked, purely for a fast validation
             // message — this is the one that actually has to hold.
-            [$stylist, $error] = BookingAvailability::resolve(
-                $service,
-                $requestedStylist,
-                $request->date('appointment_date')->toDateString(),
-                $request->input('appointment_time'),
-                lock: true,
-            );
+            // Multi-service: durations are summed into ONE combined slot.
+            [$stylist, $error] = $multi
+                ? BookingAvailability::resolveServices(
+                    $services,
+                    $requestedStylist,
+                    $request->date('appointment_date')->toDateString(),
+                    $request->input('appointment_time'),
+                    lock: true,
+                )
+                : BookingAvailability::resolve(
+                    $service,
+                    $requestedStylist,
+                    $request->date('appointment_date')->toDateString(),
+                    $request->input('appointment_time'),
+                    lock: true,
+                );
 
             if (! $stylist) {
                 throw ValidationException::withMessages(['appointment_time' => $error]);
@@ -92,7 +107,11 @@ class AppointmentController extends Controller
                 'appointment_time' => $request->string('appointment_time'),
                 'status' => Appointment::STATUS_PENDING,
             ]);
-            $appointment->applyServiceSnapshot($service, $stylist);
+            if ($multi) {
+                $appointment->applyServicesSnapshot($services, $stylist);
+            } else {
+                $appointment->applyServiceSnapshot($service, $stylist);
+            }
             $appointment->applyStylistSnapshot($stylist);
             $appointment->save();
 

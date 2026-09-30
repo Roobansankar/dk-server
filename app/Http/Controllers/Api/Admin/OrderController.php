@@ -7,6 +7,7 @@ use App\Http\Requests\Admin\UpdateOrderStatusRequest;
 use App\Http\Resources\OrderResource;
 use App\Models\Order;
 use App\Support\BookingAvailability;
+use App\Support\OrderBillPdf;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -71,6 +72,16 @@ class OrderController extends Controller
     public function show(Order $order)
     {
         return new OrderResource($order->load('items.selectedProducts'));
+    }
+
+    /**
+     * Download a bill / invoice PDF for one order — same document WhatsApp
+     * sends the customer on payment verification. Mirrors
+     * AppointmentController::bill.
+     */
+    public function bill(Order $order)
+    {
+        return OrderBillPdf::make($order)->download(OrderBillPdf::filename($order));
     }
 
     /** Fulfilment only (pending → confirmed → dispatched → delivered, or cancelled); payment status is separate. */

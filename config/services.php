@@ -60,6 +60,8 @@ return [
         'phone_number_id' => env('WHATSAPP_PHONE_NUMBER_ID'),
         'waba_id' => env('WHATSAPP_WABA_ID'),
         'template' => env('WHATSAPP_TEMPLATE_BOOKING_CONFIRMED', 'booking_confirmed'),
+        // Sent when an offline appointment is created confirmed + unpaid (name, service, date, time, reference) — no amount.
+        'template_booked' => env('WHATSAPP_TEMPLATE_BOOKING_BOOKED', 'appointment_booked2'),
         // Sent when staff mark an appointment "Paid in full" (name, service, total, reference).
         'template_paid' => env('WHATSAPP_TEMPLATE_PAYMENT_RECEIVED', 'payment_received'),
         // Sent when a shop order's payment is verified (name, order no, items, total) with the bill PDF.

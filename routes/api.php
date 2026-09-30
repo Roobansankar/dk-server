@@ -240,6 +240,8 @@ Route::prefix('admin')->middleware(['auth:sanctum'])->group(function () {
     Route::get('orders', [AdminOrderController::class, 'index'])->middleware('permission:orders.view');
     Route::get('orders/export', [AdminOrderController::class, 'export'])->middleware('permission:orders.view');
     Route::get('orders/{order}', [AdminOrderController::class, 'show'])->middleware('permission:orders.view');
+    // Bill / invoice PDF for one order (same file WhatsApp sends on payment).
+    Route::get('orders/{order}/bill', [AdminOrderController::class, 'bill'])->middleware('permission:orders.view');
     Route::match(['put', 'patch'], 'orders/{order}/status', [AdminOrderController::class, 'updateStatus'])->middleware('permission:orders.manage');
 
     // Appointments (operational list + history + offline history all use the

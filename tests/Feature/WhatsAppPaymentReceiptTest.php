@@ -46,6 +46,7 @@ class WhatsAppPaymentReceiptTest extends TestCase
             'services.whatsapp.phone_number_id' => '1347967731728408',
             'services.whatsapp.language' => 'en_US',
             'services.whatsapp.template' => 'booking_confirmed',
+            'services.whatsapp.template_booked' => 'appointment_booked2',
             'services.whatsapp.template_paid' => 'payment_received',
             // Blank by default so legacy customer-only assertions stay 1:1.
             // Owner tests set this to a test number explicitly.
@@ -195,12 +196,52 @@ class WhatsAppPaymentReceiptTest extends TestCase
 
     // --- When it is (not) sent ------------------------------------------------
 
-    public function test_other_payment_changes_send_nothing(): void
+    public function test_dropping_to_unpaid_sends_the_just_booked_message(): void
     {
         $appointment = $this->advancePaid();
 
         $this->setPayment($appointment, 'unpaid')->assertOk();
+
+        $this->assertCount(0, $this->uploads(), 'no PDF for an unpaid booking');
+        $this->assertCount(1, $this->messages());
+        $this->assertSame('appointment_booked2', $this->messages()[0]['template']['name']);
+    }
+
+    public function test_saving_unpaid_again_or_on_a_closed_booking_sends_nothing(): void
+    {
+        $unpaid = $this->advancePaid(['payment_status' => Appointment::PAYMENT_UNPAID]);
+
+        $this->setPayment($unpaid, 'unpaid')->assertOk();
+
+        foreach ([Appointment::STATUS_CANCELLED, Appointment::STATUS_REJECTED] as $status) {
+            $closed = $this->advancePaid(['status' => $status]);
+            $this->setPayment($closed, 'unpaid')->assertOk();
+        }
+
+        Http::assertNothingSent();
+    }
+
+    public function test_marking_advance_paid_sends_the_booking_confirmation(): void
+    {
+        $appointment = $this->advancePaid(['payment_status' => Appointment::PAYMENT_UNPAID]);
+
         $this->setPayment($appointment, 'advance_paid')->assertOk();
+
+        $this->assertCount(0, $this->uploads(), 'no PDF for an advance payment');
+        $this->assertCount(1, $this->messages());
+        $this->assertSame('booking_confirmed', $this->messages()[0]['template']['name']);
+    }
+
+    public function test_saving_advance_paid_again_or_on_a_closed_booking_sends_nothing(): void
+    {
+        $appointment = $this->advancePaid();
+
+        $this->setPayment($appointment, 'advance_paid')->assertOk();
+
+        foreach ([Appointment::STATUS_CANCELLED, Appointment::STATUS_REJECTED] as $status) {
+            $closed = $this->advancePaid(['status' => $status, 'payment_status' => Appointment::PAYMENT_UNPAID]);
+            $this->setPayment($closed, 'advance_paid')->assertOk();
+        }
 
         Http::assertNothingSent();
     }
@@ -382,7 +423,7 @@ class WhatsAppPaymentReceiptTest extends TestCase
         $this->assertSame('booking_confirmed', $message['template']['name']);
         $this->assertCount(1, $message['template']['components']); // body only
         $this->assertSame(
-            ['Walk-in Guest', 'Signature Facial', $appointment->appointment_date->toDateString(), '11:00 AM to 12:00 PM', '300.00', $appointment->reference],
+            ['Walk-in Guest', 'Signature Facial', $appointment->appointment_date->format('d-m-Y'), '11:00 AM to 12:00 PM', '300.00', $appointment->reference],
             collect($message['template']['components'][0]['parameters'])->pluck('text')->all(),
         );
     }
@@ -404,7 +445,7 @@ class WhatsAppPaymentReceiptTest extends TestCase
         $this->assertSame('919876500001', $owner['to']);
         $this->assertCount(1, $owner['template']['components']); // body only, no PDF
         $this->assertSame(
-            ['Walk-in Guest', $appointment->phone, 'Signature Facial', $appointment->appointment_date->toDateString(), '11:00 AM to 12:00 PM', $appointment->reference, $appointment->stylist_name ?: 'Any available'],
+            ['Walk-in Guest', $appointment->phone, 'Signature Facial', $appointment->appointment_date->format('d-m-Y'), '11:00 AM to 12:00 PM', $appointment->reference, $appointment->stylist_name ?: 'Any available'],
             collect($owner['template']['components'][0]['parameters'])->pluck('text')->all(),
         );
     }
@@ -451,12 +492,12 @@ class WhatsAppPaymentReceiptTest extends TestCase
         $this->assertSame('04:00 PM', $this->sentTime());
     }
 
-    public function test_an_unpaid_confirmed_offline_appointment_still_gets_the_booking_confirmation(): void
+    public function test_an_unpaid_confirmed_offline_appointment_gets_the_just_booked_message(): void
     {
         $this->createOffline(['payment_status' => 'unpaid']);
 
         $this->assertCount(0, $this->uploads());
-        $this->assertSame('booking_confirmed', $this->messages()[0]['template']['name']);
+        $this->assertSame('appointment_booked2', $this->messages()[0]['template']['name']);
     }
 
     public function test_a_walk_in_already_completed_and_paid_in_full_gets_the_receipt(): void

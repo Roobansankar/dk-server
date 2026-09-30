@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
 class Appointment extends Model
@@ -135,6 +136,39 @@ class Appointment extends Model
         $this->service_price = $terms['price'];
         $this->advance_percentage = $terms['advance_percentage'];
         $this->advance_amount = $terms['advance_amount'];
+    }
+
+    /**
+     * Multi-service snapshot: ONE appointment whose time is the SUM of the
+     * durations and whose name is the comma-joined service names — so the
+     * slot picker shows one combined slot and WhatsApp lists every service.
+     * Price / advance are summed per-service (each with the professional's
+     * own terms); advance % is re-derived from the totals. `service_id` /
+     * category point at the first service for reporting continuity.
+     *
+     * @param  Collection<int, Service>  $services
+     */
+    public function applyServicesSnapshot($services, ?Stylist $stylist = null): void
+    {
+        $services = $services->values();
+        $first = $services->first();
+
+        $price = 0.0;
+        $advance = 0.0;
+        foreach ($services as $service) {
+            $terms = $service->termsFor($stylist);
+            $price += (float) ($terms['price'] ?? 0);
+            $advance += (float) ($terms['advance_amount'] ?? 0);
+        }
+
+        $this->service_id = $first->id;
+        $this->service_category_id = $first->service_category_id;
+        $this->category_name = $first->category?->name;
+        $this->service_name = $services->map(fn ($s) => $s->name)->implode(', ');
+        $this->duration_minutes = (int) $services->sum('duration_minutes');
+        $this->service_price = $price;
+        $this->advance_amount = $advance;
+        $this->advance_percentage = $price > 0 ? round($advance / $price * 100, 2) : 0;
     }
 
     /**

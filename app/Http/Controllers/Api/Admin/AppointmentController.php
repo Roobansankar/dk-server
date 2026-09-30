@@ -85,17 +85,24 @@ class AppointmentController extends Controller
     public function store(StoreOfflineAppointmentRequest $request)
     {
         $plan = $request->filled('pricing_plan_id') ? PricingPlan::findOrFail($request->integer('pricing_plan_id')) : null;
-        $service = $plan ? null : Service::with('category')->findOrFail($request->integer('service_id'));
+        $multi = ! $plan && $request->filled('service_ids');
+        $ids = $multi
+            ? collect($request->input('service_ids'))->map(fn ($id) => (int) $id)->unique()->values()
+            : collect([$request->integer('service_id')]);
+        $services = $plan ? collect() : Service::with('category')->whereIn('id', $ids)->get()
+            ->sortBy(fn ($s) => $ids->search((int) $s->id))->values();
+        $service = $plan ? null : $services->firstOrFail();
+        $duration = $plan ? $plan->duration_minutes : (int) $services->sum('duration_minutes');
         $stylist = $request->filled('stylist_id') ? Stylist::find($request->integer('stylist_id')) : null;
         $status = $request->input('status', Appointment::STATUS_CONFIRMED);
 
-        $appointment = DB::transaction(function () use ($request, $service, $plan, $stylist, $status) {
+        $appointment = DB::transaction(function () use ($request, $service, $services, $multi, $plan, $stylist, $status, $duration) {
             if ($status === Appointment::STATUS_CONFIRMED) {
                 $this->assertSlotIsFree(
                     $stylist?->id,
                     $request->date('appointment_date'),
                     $request->string('appointment_time')->value(),
-                    $plan ? $plan->duration_minutes : $service->duration_minutes,
+                    $duration,
                 );
             }
 
@@ -114,6 +121,8 @@ class AppointmentController extends Controller
             ]);
             if ($plan) {
                 $appointment->applyPricingPlanSnapshot($plan);
+            } elseif ($multi) {
+                $appointment->applyServicesSnapshot($services, $stylist);
             } else {
                 $appointment->applyServiceSnapshot($service, $stylist);
             }
@@ -187,6 +196,8 @@ class AppointmentController extends Controller
     {
         $data = $request->validated();
         $wasPaid = $appointment->payment_status === Appointment::PAYMENT_PAID;
+        $wasAdvancePaid = $appointment->payment_status === Appointment::PAYMENT_ADVANCE_PAID;
+        $wasUnpaid = $appointment->payment_status === Appointment::PAYMENT_UNPAID;
 
         $targetStatus = $data['status'] ?? $appointment->status;
         $rescheduling = array_key_exists('appointment_date', $data) || array_key_exists('appointment_time', $data);
@@ -196,6 +207,8 @@ class AppointmentController extends Controller
         if (! $needsSlotCheck) {
             $appointment->update($data);
             $this->notifyIfNowPaid($appointment, $wasPaid);
+            $this->notifyIfNowAdvancePaid($appointment->fresh(), $wasAdvancePaid);
+            $this->notifyIfNowUnpaid($appointment->fresh(), $wasUnpaid);
 
             return new AppointmentResource($appointment->fresh());
         }
@@ -234,6 +247,8 @@ class AppointmentController extends Controller
         });
 
         $this->notifyIfNowPaid($fresh, $wasPaid);
+        $this->notifyIfNowAdvancePaid($fresh->fresh(), $wasAdvancePaid);
+        $this->notifyIfNowUnpaid($fresh->fresh(), $wasUnpaid);
 
         return new AppointmentResource($fresh->fresh());
     }
@@ -242,7 +257,8 @@ class AppointmentController extends Controller
      * A walk-in / phone booking was just created — tell the customer on WhatsApp,
      * by what was paid (best-effort: it can never fail or undo the booking):
      *   - "Paid in full"  → the payment receipt with the bill PDF (`payment_received`);
-     *   - anything else, when created confirmed (i.e. "Advance paid") → the booking
+     *   - confirmed + unpaid → the just-booked message (`appointment_booked2`, no amount);
+     *   - confirmed + anything else (i.e. "Advance paid") → the booking
      *     confirmation (`booking_confirmed`).
      * One message, never both; nothing for a cancelled/rejected booking.
      */
@@ -260,6 +276,9 @@ class AppointmentController extends Controller
                 $fresh = $appointment->fresh();
                 if ($paidInFull) {
                     WhatsApp::sendPaymentReceived($fresh);
+                } elseif ($fresh->payment_status === Appointment::PAYMENT_UNPAID) {
+                    WhatsApp::sendBookingBooked($fresh);
+                    WhatsApp::sendOwnerBookingAlert($fresh);
                 } else {
                     WhatsApp::sendBookingConfirmed($fresh);
                     WhatsApp::sendOwnerBookingAlert($fresh);
@@ -289,6 +308,58 @@ class AppointmentController extends Controller
             DB::afterCommit(fn () => WhatsApp::sendPaymentReceived($appointment->fresh()));
         } catch (\Throwable $e) {
             Log::warning('WhatsApp after marking paid skipped: '.$e->getMessage());
+        }
+    }
+
+    /**
+     * Staff just collected the advance ("Advance paid") → send the customer
+     * the booking confirmation. Only on the change INTO advance_paid — saving
+     * an already-advance-paid appointment again, or any other edit, sends
+     * nothing — and never for a cancelled/rejected booking. Best-effort: a
+     * WhatsApp failure must not undo or fail the payment update.
+     */
+    private function notifyIfNowAdvancePaid(Appointment $appointment, bool $wasAdvancePaid): void
+    {
+        if ($wasAdvancePaid
+            || $appointment->payment_status !== Appointment::PAYMENT_ADVANCE_PAID
+            || in_array($appointment->status, [Appointment::STATUS_CANCELLED, Appointment::STATUS_REJECTED], true)) {
+            return;
+        }
+
+        try {
+            DB::afterCommit(function () use ($appointment) {
+                $fresh = $appointment->fresh();
+                WhatsApp::sendBookingConfirmed($fresh);
+                WhatsApp::sendOwnerBookingAlert($fresh);
+            });
+        } catch (\Throwable $e) {
+            Log::warning('WhatsApp after marking advance paid skipped: '.$e->getMessage());
+        }
+    }
+
+    /**
+     * Staff just moved the booking back to unpaid → send the customer the
+     * just-booked message (`appointment_booked2`, no amount). Only on the
+     * change INTO unpaid — saving an already-unpaid appointment again, or any
+     * other edit, sends nothing — and never for a cancelled/rejected booking.
+     * Best-effort: a WhatsApp failure must not undo or fail the update.
+     */
+    private function notifyIfNowUnpaid(Appointment $appointment, bool $wasUnpaid): void
+    {
+        if ($wasUnpaid
+            || $appointment->payment_status !== Appointment::PAYMENT_UNPAID
+            || in_array($appointment->status, [Appointment::STATUS_CANCELLED, Appointment::STATUS_REJECTED], true)) {
+            return;
+        }
+
+        try {
+            DB::afterCommit(function () use ($appointment) {
+                $fresh = $appointment->fresh();
+                WhatsApp::sendBookingBooked($fresh);
+                WhatsApp::sendOwnerBookingAlert($fresh);
+            });
+        } catch (\Throwable $e) {
+            Log::warning('WhatsApp after marking unpaid skipped: '.$e->getMessage());
         }
     }
 
