@@ -24,6 +24,7 @@ use App\Http\Controllers\Api\Public\AccountController;
 use App\Http\Controllers\Api\Public\AppointmentController;
 use App\Http\Controllers\Api\Public\AuthController as CustomerAuthController;
 use App\Http\Controllers\Api\Public\BookingSlotsController;
+use App\Http\Controllers\Api\Public\BrochureController;
 use App\Http\Controllers\Api\Public\ComboController;
 use App\Http\Controllers\Api\Public\GalleryController;
 use App\Http\Controllers\Api\Public\GoogleAuthController;
@@ -71,6 +72,9 @@ Route::get('studio-holidays', [PublicStudioHolidayController::class, 'index']);
 Route::get('pricing-plans', [PricingPlanController::class, 'index']);
 Route::get('site-settings', [SiteSettingController::class, 'index']);
 Route::get('reviews', [CustomerReviewController::class, 'index']);
+// Studio brochure PDF behind the QR code on the public Contact page —
+// stylists with photos plus the full price list, generated live.
+Route::get('brochure', [BrochureController::class, 'show'])->middleware('throttle:30,1');
 // A customer's own review — pending admin approval, like a staff-entered
 // Google review. Requires a signed-in account, same as `POST /appointments`.
 Route::post('reviews', [CustomerReviewController::class, 'store'])->middleware(['throttle:6,1', 'auth:sanctum']);
