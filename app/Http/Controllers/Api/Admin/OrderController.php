@@ -46,6 +46,7 @@ class OrderController extends Controller
         $writer->addRow(Row::fromValues([
             'Order Number', 'Date', 'Customer', 'Phone', 'Items',
             'Amount Paid', 'Payment Status', 'Fulfilment Status',
+            'Source', 'Payment Method', 'Address',
         ]));
 
         foreach ($orders->lazy() as $o) {
@@ -60,6 +61,10 @@ class OrderController extends Controller
                 (float) ($o->amount_paid ?? $o->total ?? 0),
                 ucwords(str_replace('_', ' ', (string) $o->payment_status)),
                 ucfirst((string) $o->status),
+                ucfirst((string) $o->source),
+                // Online orders are always paid through Razorpay.
+                $o->payment_method ? strtoupper($o->payment_method) : ($o->razorpay_payment_id ? 'Razorpay' : ''),
+                (string) $o->customer_address,
             ]));
         }
         $writer->close();
@@ -84,7 +89,7 @@ class OrderController extends Controller
         return OrderBillPdf::make($order)->download(OrderBillPdf::filename($order));
     }
 
-    /** Fulfilment only (pending → confirmed → dispatched → delivered, or cancelled); payment status is separate. */
+    /** Fulfilment only (confirmed → delivered); payment status is separate. */
     public function updateStatus(UpdateOrderStatusRequest $request, Order $order)
     {
         $status = $request->validated('status');

@@ -339,7 +339,7 @@ class ProductOrderTest extends TestCase
             )
             ->assertJsonPath(
                 'data.status',
-                'pending'
+                'confirmed'
             )
             ->assertJsonPath(
                 'data.total',
@@ -779,25 +779,27 @@ class ProductOrderTest extends TestCase
             )
             ->assertJsonPath(
                 'data.0.status',
-                'pending'
+                'confirmed'
             )
             ->assertJsonPath(
                 'data.0.items.0.selected_products.0.name',
                 'Pro-1'
             );
 
-        // Skipping ahead is refused.
-        $this->patchJson(
-            "/api/admin/orders/{$order->id}/status",
-            [
-                'status' => 'dispatched',
-            ]
-        )
-            ->assertStatus(422)
-            ->assertJsonValidationErrors('status');
+        // Dispatched is no longer a step, and Confirmed is where it starts.
+        foreach (['dispatched', 'confirmed'] as $status) {
+            $this->patchJson(
+                "/api/admin/orders/{$order->id}/status",
+                [
+                    'status' => $status,
+                ]
+            )
+                ->assertStatus(422)
+                ->assertJsonValidationErrors('status');
+        }
 
         foreach (
-            ['confirmed', 'dispatched', 'delivered'] as $status
+            ['delivered'] as $status
         ) {
             $this->patchJson(
                 "/api/admin/orders/{$order->id}/status",
@@ -841,7 +843,7 @@ class ProductOrderTest extends TestCase
         );
 
         foreach (
-            ['paid', 'pending', 'cancelled'] as $status
+            ['paid', 'pending', 'confirmed', 'dispatched', 'cancelled'] as $status
         ) {
             $this->patchJson(
                 "/api/admin/orders/{$order->id}/status",
@@ -856,14 +858,14 @@ class ProductOrderTest extends TestCase
         $this->patchJson(
             "/api/admin/orders/{$order->id}/status",
             [
-                'status' => 'confirmed',
+                'status' => 'delivered',
                 'payment_status' => 'refunded',
             ]
         )->assertOk();
 
         $this->assertSame(
             [
-                'confirmed',
+                'delivered',
                 'paid',
             ],
             [
@@ -1040,5 +1042,41 @@ class ProductOrderTest extends TestCase
         $this->assertSame(1400.0, (float) $data['total']);
         $this->assertSame(1400.0, (float) $data['items'][0]['unit_price']);
         $this->assertSame(1400.0, (float) $data['items'][0]['line_total']);
+    }
+
+    public function test_online_order_lines_snapshot_the_tax_inside_the_price_and_source_is_online(): void
+    {
+        $this->p1->update(['selling_price' => 1050, 'tax_percent' => 5]);
+
+        $this->actingAsToken($this->customer());
+
+        $order = $this->paidOrder([$this->productItem($this->p1, 2)]);
+
+        $this->assertSame(Order::SOURCE_ONLINE, $order->source);
+        $this->assertNull($order->payment_method);
+        $this->assertSame('2100.00', $order->total);
+
+        $item = $order->items()->sole();
+        $this->assertSame('5.00', $item->tax_percent);
+        // 2100 × 5 / 105 — informational, the charge is still 2100.
+        $this->assertSame('100.00', $item->tax_amount);
+    }
+
+    public function test_legacy_pending_and_dispatched_orders_can_still_be_marked_delivered(): void
+    {
+        $this->actingAsToken($this->customer());
+
+        $pending = $this->paidOrder([$this->productItem($this->p1)]);
+        $dispatched = $this->paidOrder([$this->productItem($this->p2)]);
+        $pending->forceFill(['status' => Order::STATUS_PENDING])->save();
+        $dispatched->forceFill(['status' => Order::STATUS_DISPATCHED])->save();
+
+        $this->actingAsToken($this->superadmin());
+
+        foreach ([$pending, $dispatched] as $order) {
+            $this->patchJson("/api/admin/orders/{$order->id}/status", ['status' => 'delivered'])
+                ->assertOk()
+                ->assertJsonPath('data.status', 'delivered');
+        }
     }
 }
