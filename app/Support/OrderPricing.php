@@ -26,8 +26,10 @@ class OrderPricing
                     'combo_id' => $line['combo_id'],
                     'name' => $line['name'],
                     'unit_price' => self::toRupees($line['unit_paise']),
+                    'tax_percent' => $line['tax_percent'],
                     'quantity' => $line['quantity'],
                     'line_total' => self::toRupees($line['line_total_paise']),
+                    'tax_amount' => self::toRupees($line['tax_paise']),
                     'selected_products' => $line['selected_products'],
                 ];
             },
@@ -37,6 +39,7 @@ class OrderPricing
         return [
             'lines' => $lines,
             'subtotal' => self::toRupees($calculated['subtotal_paise']),
+            'tax_total' => self::toRupees($calculated['tax_paise']),
         ];
     }
 
@@ -49,6 +52,7 @@ class OrderPricing
     {
         $lines = [];
         $subtotalPaise = 0;
+        $taxPaise = 0;
 
         foreach ($items as $index => $item) {
             $type = $item['type'] ?? null;
@@ -81,8 +85,13 @@ class OrderPricing
 
             $line['quantity'] = $quantity;
             $line['line_total_paise'] = $line['unit_paise'] * $quantity;
+            $line['tax_paise'] = self::includedTaxPaise(
+                $line['line_total_paise'],
+                (float) $line['tax_percent']
+            );
 
             $subtotalPaise += $line['line_total_paise'];
+            $taxPaise += $line['tax_paise'];
             $lines[] = $line;
         }
 
@@ -91,6 +100,7 @@ class OrderPricing
         return [
             'items' => $lines,
             'subtotal_paise' => $subtotalPaise,
+            'tax_paise' => $taxPaise,
             'total_paise' => $subtotalPaise,
         ];
     }
@@ -120,6 +130,7 @@ class OrderPricing
             'combo_id' => null,
             'name' => $product->name,
             'unit_paise' => $unitPaise,
+            'tax_percent' => self::percent($product->tax_percent),
             'selected_products' => [],
         ];
     }
@@ -233,6 +244,7 @@ class OrderPricing
             'combo_id' => $combo->id,
             'name' => $combo->name,
             'unit_paise' => $unitPaise,
+            'tax_percent' => self::percent($combo->tax_percent),
             'selected_products' => $selected,
         ];
     }
@@ -298,6 +310,24 @@ class OrderPricing
                 );
             }
         }
+    }
+
+    /**
+     * The tax already INSIDE a tax-inclusive amount — informational only,
+     * it never changes what is charged (₹1,000 at 5% → ₹47.62).
+     */
+    private static function includedTaxPaise(int $grossPaise, float $percent): int
+    {
+        if ($percent <= 0) {
+            return 0;
+        }
+
+        return (int) round($grossPaise * $percent / (100 + $percent));
+    }
+
+    private static function percent(string|int|float|null $value): string
+    {
+        return number_format((float) ($value ?? 0), 2, '.', '');
     }
 
     private static function toPaise(string|int|float $amount): int

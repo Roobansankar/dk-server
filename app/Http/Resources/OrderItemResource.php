@@ -16,8 +16,10 @@ class OrderItemResource extends JsonResource
             'combo_id' => $this->combo_id,
             'name' => $this->name,
             'unit_price' => (float) $this->unit_price,
+            'tax_percent' => (float) $this->tax_percent,
             'quantity' => $this->quantity,
             'line_total' => (float) $this->line_total,
+            'tax_amount' => (float) $this->tax_amount,
             'selected_products' => $this->whenLoaded('selectedProducts', fn () => $this->selectedProducts->map(fn ($p) => [
                 'product_id' => $p->product_id,
                 'name' => $p->product_name,

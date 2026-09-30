@@ -196,7 +196,7 @@ class ProductCheckoutController extends Controller
              * If inventory deduction fails afterwards, the entire
              * transaction rolls back, so this order will not remain.
              */
-            $order = Order::create([
+            $order = new Order([
                 'user_id' => $locked->user_id,
                 'customer_name' => $locked->customer_name,
                 'phone' => $locked->phone,
@@ -211,6 +211,10 @@ class ProductCheckoutController extends Controller
                 'razorpay_payment_id' => $data['razorpay_payment_id'],
                 'paid_at' => now(),
             ]);
+            // A verified payment confirms the order; the only fulfilment
+            // step left is Delivered.
+            $order->status = Order::STATUS_CONFIRMED;
+            $order->save();
 
             foreach ($locked->lines as $line) {
                 $item = $order->items()->create(

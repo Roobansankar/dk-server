@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\Admin\AppointmentController as AdminAppointmentCont
 use App\Http\Controllers\Api\Admin\ComboController as AdminComboController;
 use App\Http\Controllers\Api\Admin\DashboardController;
 use App\Http\Controllers\Api\Admin\GalleryImageController as AdminGalleryController;
+use App\Http\Controllers\Api\Admin\OfflineBillingController as AdminOfflineBillingController;
 use App\Http\Controllers\Api\Admin\OrderController as AdminOrderController;
 use App\Http\Controllers\Api\Admin\PaymentReportController;
 use App\Http\Controllers\Api\Admin\PermissionController;
@@ -247,6 +248,14 @@ Route::prefix('admin')->middleware(['auth:sanctum'])->group(function () {
     // Bill / invoice PDF for one order (same file WhatsApp sends on payment).
     Route::get('orders/{order}/bill', [AdminOrderController::class, 'bill'])->middleware('permission:orders.view');
     Route::match(['put', 'patch'], 'orders/{order}/status', [AdminOrderController::class, 'updateStatus'])->middleware('permission:orders.manage');
+
+    // Offline billing — an in-person product sale recorded as a paid,
+    // confirmed order (source = offline). Same stock + pricing as online.
+    Route::middleware('permission:orders.manage')->group(function () {
+        Route::get('offline-billing/products', [AdminOfflineBillingController::class, 'products']);
+        Route::post('offline-billing/preview', [AdminOfflineBillingController::class, 'preview']);
+        Route::post('offline-billing', [AdminOfflineBillingController::class, 'store']);
+    });
 
     // Appointments (operational list + history + offline history all use the
     // same filtered endpoint; offline history just pins ?source=offline)

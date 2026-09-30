@@ -20,16 +20,20 @@ class OrderItem extends Model
         'combo_id',
         'name',
         'unit_price',
+        'tax_percent',
         'quantity',
         'line_total',
+        'tax_amount',
     ];
 
     protected function casts(): array
     {
         return [
             'unit_price' => 'decimal:2',
+            'tax_percent' => 'decimal:2',
             'quantity' => 'integer',
             'line_total' => 'decimal:2',
+            'tax_amount' => 'decimal:2',
         ];
     }
 
