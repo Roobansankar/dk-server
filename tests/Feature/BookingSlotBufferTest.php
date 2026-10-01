@@ -39,10 +39,6 @@ class BookingSlotBufferTest extends TestCase
         parent::setUp();
         Cache::flush();
         $this->setHours('10:00', '19:30');
-        // Every booking in this file goes through the online endpoint, which
-        // now requires a signed-in customer — the buffer/break/closing rules
-        // under test here are orthogonal to that gate.
-        $this->actingAsToken($this->customer());
     }
 
     protected function tearDown(): void

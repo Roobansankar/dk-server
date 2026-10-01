@@ -64,8 +64,6 @@ class StylistServiceTermsTest extends TestCase
 
     private function book(Service $service, ?Stylist $stylist = null): TestResponse
     {
-        $this->actingAsToken($this->customer());
-
         return $this->postJson('/api/appointments', array_filter([
             'customer_name' => 'Priya R', 'phone' => '+91 9790431212', 'gender' => 'female',
             'category_id' => $service->service_category_id, 'service_id' => $service->id,

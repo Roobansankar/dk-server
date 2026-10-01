@@ -158,8 +158,6 @@ class ProductOrderTest extends TestCase
 
     public function test_checkout_opens_a_razorpay_order_for_the_server_calculated_amount_and_creates_no_order(): void
     {
-        $this->actingAsToken($this->customer());
-
         // Pro-1 + Pro-3 at combo prices = 500 + 450 = 950 (not 800 + 700).
         $response = $this->checkout([
             $this->comboItem([$this->p1->id, $this->p3->id]),
@@ -194,8 +192,6 @@ class ProductOrderTest extends TestCase
 
     public function test_server_calculated_amount_is_authoritative(): void
     {
-        $this->actingAsToken($this->customer());
-
         $items = [
             $this->comboItem(
                 [$this->p1->id, $this->p2->id, $this->p3->id],
@@ -246,8 +242,6 @@ class ProductOrderTest extends TestCase
 
     public function test_combo_selection_is_validated_against_the_combo_configuration(): void
     {
-        $this->actingAsToken($this->customer());
-
         $outsider = Product::factory()->create();
 
         $this->checkout([
@@ -283,29 +277,203 @@ class ProductOrderTest extends TestCase
         );
     }
 
-    public function test_checkout_requires_a_signed_in_customer(): void
+    // --- Guest checkout (no account) ---------------------------------------
+
+    public function test_a_guest_can_open_a_checkout_for_the_server_calculated_amount(): void
     {
-        $items = [
-            $this->productItem($this->p1),
-        ];
+        // Combo (Pro-3 450 + Pro-1 500 = 950) + Pro-2 × 2 (850 each) = 2650.
+        // The client-sent totals are ignored.
+        $response = $this->checkout([
+            $this->comboItem([$this->p3->id, $this->p1->id]),
+            $this->productItem($this->p2, 2),
+        ], ['total' => 1, 'subtotal' => 1, 'amount' => 1])
+            ->assertCreated()
+            ->assertJsonPath('data.amount', 265000)
+            ->assertJsonPath('data.total', fn ($v) => (float) $v === 2650.0)
+            ->assertJsonPath('data.prefill.name', 'Asha Rao')
+            ->assertJsonPath('data.prefill.contact', '9876543210');
 
-        $this->checkout($items)
-            ->assertUnauthorized();
+        Http::assertSent(fn (HttpRequest $r) => $r->data()['amount'] === 265000);
 
-        $this->actingAsToken($this->admin());
+        $this->assertDatabaseHas('product_checkouts', [
+            'id' => $response->json('data.checkout_id'),
+            'user_id' => null,
+            'customer_name' => 'Asha Rao',
+            'phone' => '9876543210',
+            'amount' => 2650,
+        ]);
 
-        $this->checkout($items)
-            ->assertForbidden();
+        // Opening a checkout creates no order and reserves no stock.
+        $this->assertDatabaseCount('orders', 0);
+        $this->assertDatabaseCount('product_stock_movements', 0);
+        $this->assertSame(100, $this->p2->fresh()->stock_quantity);
+    }
+
+    public function test_a_guest_checkout_is_still_validated(): void
+    {
+        $this->postJson('/api/checkout', [])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['customer_name', 'phone', 'items']);
+
+        $this->checkout([$this->productItem($this->p1)], ['phone' => 'not-a-phone'])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('phone');
 
         Http::assertNothingSent();
+        $this->assertDatabaseCount('product_checkouts', 0);
+    }
+
+    public function test_a_guest_payment_creates_a_paid_order_with_no_account_and_deducts_stock(): void
+    {
+        $data = $this->checkout([
+            $this->comboItem([$this->p3->id, $this->p1->id]),
+            $this->productItem($this->p2, 2),
+        ])->assertCreated()->json('data');
+
+        $response = $this->verify($data['checkout_id'], $data['order_id'], 'pay_guest')
+            ->assertCreated()
+            ->assertJsonPath('data.user_id', null)
+            ->assertJsonPath('data.customer_name', 'Asha Rao')
+            ->assertJsonPath('data.phone', '9876543210')
+            ->assertJsonPath('data.source', 'online')
+            ->assertJsonPath('data.status', 'confirmed')
+            ->assertJsonPath('data.payment_status', 'paid')
+            ->assertJsonPath('data.total', fn ($v) => (float) $v === 2650.0)
+            ->assertJsonPath('data.amount_paid', fn ($v) => (float) $v === 2650.0)
+            ->assertJsonPath('data.razorpay_order_id', $data['order_id'])
+            ->assertJsonPath('data.razorpay_payment_id', 'pay_guest')
+            ->assertJsonCount(2, 'data.items');
+
+        $order = Order::sole();
+        $this->assertNull($order->user_id);
+        $this->assertSame($response->json('data.id'), $order->id);
+        $this->assertSame($order->id, ProductCheckout::find($data['checkout_id'])->order_id);
+
+        // Stock is deducted once per product, each with a SALE movement
+        // tied to this order.
+        $this->assertSame(99, $this->p1->fresh()->stock_quantity);
+        $this->assertSame(98, $this->p2->fresh()->stock_quantity);
+        $this->assertSame(99, $this->p3->fresh()->stock_quantity);
+
+        foreach ([[$this->p1, -1, 99], [$this->p2, -2, 98], [$this->p3, -1, 99]] as [$product, $quantity, $balance]) {
+            $this->assertDatabaseHas('product_stock_movements', [
+                'product_id' => $product->id,
+                'type' => 'sale',
+                'quantity' => $quantity,
+                'balance_after' => $balance,
+                'order_id' => $order->id,
+            ]);
+        }
+        $this->assertDatabaseCount('product_stock_movements', 3);
+
+        // The same verified payment replayed is a no-op.
+        $this->verify($data['checkout_id'], $data['order_id'], 'pay_guest')
+            ->assertOk()
+            ->assertJsonPath('data.id', $order->id);
+
+        $this->assertDatabaseCount('orders', 1);
+        $this->assertDatabaseCount('product_stock_movements', 3);
+        $this->assertSame(98, $this->p2->fresh()->stock_quantity);
+    }
+
+    public function test_a_forged_guest_payment_creates_no_order_and_leaves_stock_alone(): void
+    {
+        $data = $this->checkout([$this->productItem($this->p1, 3)])->json('data');
+        $other = $this->checkout([$this->productItem($this->p3)])->json('data');
+
+        // Made-up signature.
+        $this->verify($data['checkout_id'], $data['order_id'], 'pay_x', 'forged-signature')
+            ->assertStatus(422)->assertJsonValidationErrors('razorpay_signature');
+
+        // A real signature, but for a different payment id.
+        $this->verify($data['checkout_id'], $data['order_id'], 'pay_swapped', $this->signature($data['order_id'], 'pay_ok'))
+            ->assertStatus(422)->assertJsonValidationErrors('razorpay_signature');
+
+        // A correctly signed payment for another checkout's Razorpay order.
+        $this->verify($data['checkout_id'], $other['order_id'])
+            ->assertStatus(422)->assertJsonValidationErrors('razorpay_order_id');
+
+        // A correctly signed, made-up Razorpay order id.
+        $this->verify($data['checkout_id'], 'order_made_up')
+            ->assertStatus(422)->assertJsonValidationErrors('razorpay_order_id');
+
+        // A checkout that does not exist.
+        $this->verify(999999, $data['order_id'])->assertNotFound();
+
+        $this->assertDatabaseCount('orders', 0);
+        $this->assertDatabaseCount('product_stock_movements', 0);
+        $this->assertSame(100, $this->p1->fresh()->stock_quantity);
+        $this->assertSame(100, $this->p3->fresh()->stock_quantity);
+        $this->assertNull(ProductCheckout::find($data['checkout_id'])->order_id);
+    }
+
+    public function test_a_guest_order_that_cannot_be_fulfilled_rolls_back_without_touching_stock(): void
+    {
+        $data = $this->checkout([
+            $this->productItem($this->p1, 2),
+            $this->productItem($this->p2, 2),
+        ])->json('data');
+
+        // Stock runs out between opening the checkout and paying.
+        $this->p2->forceFill(['stock_quantity' => 1])->save();
+
+        $this->verify($data['checkout_id'], $data['order_id'])
+            ->assertStatus(422)->assertJsonValidationErrors('items');
+
+        $this->assertDatabaseCount('orders', 0);
+        $this->assertDatabaseCount('product_stock_movements', 0);
+        $this->assertSame(100, $this->p1->fresh()->stock_quantity);
+        $this->assertSame(1, $this->p2->fresh()->stock_quantity);
+    }
+
+    /** There are no customer accounts: a bearer token never gives an order an owner. */
+    public function test_an_order_never_gets_an_owner_even_when_a_token_is_sent(): void
+    {
+        foreach ([$this->customer(), $this->admin()] as $i => $user) {
+            $this->actingAsToken($user);
+
+            $data = $this->checkout([$this->productItem($this->p1)])->assertCreated()->json('data');
+            $this->verify($data['checkout_id'], $data['order_id'], "pay_{$i}")
+                ->assertCreated()
+                ->assertJsonPath('data.user_id', null);
+        }
+
+        $this->assertSame(0, ProductCheckout::whereNotNull('user_id')->count());
+        $this->assertSame(0, Order::whereNotNull('user_id')->count());
+    }
+
+    public function test_admin_sees_guest_orders_and_admin_order_endpoints_reject_guests(): void
+    {
+        $order = $this->paidOrder([$this->productItem($this->p1)]);
+        $this->assertNull($order->user_id);
+
+        $this->getJson('/api/admin/orders')->assertUnauthorized();
+        $this->getJson("/api/admin/orders/{$order->id}")->assertUnauthorized();
+        $this->getJson("/api/admin/orders/{$order->id}/bill")->assertUnauthorized();
+        $this->patchJson("/api/admin/orders/{$order->id}/status", ['status' => 'delivered'])->assertUnauthorized();
+        $this->postJson('/api/admin/offline-billing', [])->assertUnauthorized();
+        // The customer order-history endpoint no longer exists.
+        $this->getJson('/api/account/orders')->assertNotFound();
+        $this->getJson("/api/account/orders/{$order->id}")->assertNotFound();
+
+        $this->actingAsToken($this->superadmin());
+
+        $this->getJson('/api/admin/orders')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $order->id)
+            ->assertJsonPath('data.0.user_id', null)
+            ->assertJsonPath('data.0.customer_name', 'Asha Rao');
+
+        $this->patchJson("/api/admin/orders/{$order->id}/status", ['status' => 'delivered'])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'delivered');
     }
 
     // --- Verification ------------------------------------------------------
 
     public function test_successful_payment_creates_exactly_one_paid_order_with_snapshots(): void
     {
-        $customer = $this->actingAsToken($this->customer());
-
         $data = $this->checkout([
             $this->comboItem([
                 $this->p3->id,
@@ -323,7 +491,7 @@ class ProductOrderTest extends TestCase
             ->assertCreated()
             ->assertJsonPath(
                 'data.user_id',
-                $customer->id
+                null
             )
             ->assertJsonPath(
                 'data.customer_name',
@@ -436,8 +604,6 @@ class ProductOrderTest extends TestCase
 
     public function test_failed_or_abandoned_payment_creates_no_order(): void
     {
-        $this->actingAsToken($this->customer());
-
         $data = $this->checkout([
             $this->productItem($this->p1),
         ])->json('data');
@@ -467,8 +633,6 @@ class ProductOrderTest extends TestCase
 
     public function test_invalid_signature_creates_no_order(): void
     {
-        $this->actingAsToken($this->customer());
-
         $data = $this->checkout([
             $this->productItem($this->p1),
         ])->json('data');
@@ -492,8 +656,6 @@ class ProductOrderTest extends TestCase
 
     public function test_a_different_razorpay_order_cannot_be_used(): void
     {
-        $this->actingAsToken($this->customer());
-
         $cheap = $this->checkout([
             $this->productItem($this->p3),
         ])->json('data');
@@ -532,8 +694,6 @@ class ProductOrderTest extends TestCase
 
     public function test_repeated_successful_verification_is_idempotent(): void
     {
-        $this->actingAsToken($this->customer());
-
         $data = $this->checkout([
             $this->productItem($this->p1),
         ])->json('data');
@@ -582,68 +742,8 @@ class ProductOrderTest extends TestCase
         );
     }
 
-    public function test_customer_cannot_verify_or_view_another_customers_checkout_or_order(): void
-    {
-        $owner = $this->actingAsToken($this->customer());
-
-        $data = $this->checkout([
-            $this->productItem($this->p1),
-        ])->json('data');
-
-        $this->actingAsToken(
-            $this->customer()
-        );
-
-        $this->verify(
-            $data['checkout_id'],
-            $data['order_id']
-        )->assertNotFound();
-
-        $this->assertDatabaseCount(
-            'orders',
-            0
-        );
-
-        $this->actingAsToken($owner);
-
-        $this->verify(
-            $data['checkout_id'],
-            $data['order_id']
-        )->assertCreated();
-
-        $order = Order::first();
-
-        $this->getJson(
-            "/api/account/orders/{$order->id}"
-        )->assertOk();
-
-        $this->getJson(
-            '/api/account/orders'
-        )
-            ->assertOk()
-            ->assertJsonCount(1, 'data');
-
-        $this->actingAsToken(
-            $this->customer()
-        );
-
-        $this->getJson(
-            "/api/account/orders/{$order->id}"
-        )->assertNotFound();
-
-        $this->getJson(
-            '/api/account/orders'
-        )
-            ->assertOk()
-            ->assertJsonCount(0, 'data');
-    }
-
     public function test_price_snapshots_do_not_change_after_product_or_combo_price_edits(): void
     {
-        $this->actingAsToken(
-            $this->customer()
-        );
-
         $order = $this->paidOrder([
             $this->comboItem([
                 $this->p1->id,
@@ -707,10 +807,6 @@ class ProductOrderTest extends TestCase
 
     public function test_a_checkout_priced_before_a_price_change_is_fulfilled_at_the_paid_price(): void
     {
-        $this->actingAsToken(
-            $this->customer()
-        );
-
         $data = $this->checkout([
             $this->comboItem([
                 $this->p1->id,
@@ -742,10 +838,6 @@ class ProductOrderTest extends TestCase
 
     public function test_admin_sees_paid_orders_and_advances_fulfilment_in_order(): void
     {
-        $this->actingAsToken(
-            $this->customer()
-        );
-
         $this->checkout([
             $this->productItem($this->p2),
         ]); // unpaid checkout — never an order
@@ -830,10 +922,6 @@ class ProductOrderTest extends TestCase
 
     public function test_payment_status_and_other_statuses_are_not_admin_actions(): void
     {
-        $this->actingAsToken(
-            $this->customer()
-        );
-
         $order = $this->paidOrder([
             $this->productItem($this->p1),
         ]);
@@ -877,10 +965,6 @@ class ProductOrderTest extends TestCase
 
     public function test_order_status_updates_require_the_orders_manage_permission(): void
     {
-        $this->actingAsToken(
-            $this->customer()
-        );
-
         $order = $this->paidOrder([
             $this->productItem($this->p1),
         ]);
@@ -915,8 +999,6 @@ class ProductOrderTest extends TestCase
 
     public function test_product_tax_is_inside_the_selling_price_not_added_on_top(): void
     {
-        $this->actingAsToken($this->customer());
-
         $this->p1->update([
             'selling_price' => 1000,
             'tax_percent' => 5,
@@ -937,8 +1019,6 @@ class ProductOrderTest extends TestCase
 
     public function test_a_products_tax_percent_does_not_change_what_is_charged(): void
     {
-        $this->actingAsToken($this->customer());
-
         $charged = [];
 
         foreach ([0, 5, 18, 100] as $percent) {
@@ -955,8 +1035,6 @@ class ProductOrderTest extends TestCase
 
     public function test_products_and_combos_with_tax_are_charged_their_listed_prices_in_one_basket(): void
     {
-        $this->actingAsToken($this->customer());
-
         $this->p2->update(['selling_price' => 1000, 'tax_percent' => 5]);
         $this->combo->update(['tax_percent' => 5, 'bundle_price' => 1400]);
 
@@ -976,8 +1054,6 @@ class ProductOrderTest extends TestCase
 
     public function test_a_combos_tax_percent_does_not_change_what_is_charged(): void
     {
-        $this->actingAsToken($this->customer());
-
         $charged = [];
 
         foreach ([0, 5, 18, 100] as $percent) {
@@ -996,8 +1072,6 @@ class ProductOrderTest extends TestCase
 
     public function test_partial_combo_tax_is_inside_the_selected_combo_price(): void
     {
-        $this->actingAsToken($this->customer());
-
         $this->combo->update([
             'tax_percent' => 5,
         ]);
@@ -1020,8 +1094,6 @@ class ProductOrderTest extends TestCase
 
     public function test_complete_combo_bundle_price_includes_the_combo_tax(): void
     {
-        $this->actingAsToken($this->customer());
-
         $this->combo->update([
             'tax_percent' => 5,
             'bundle_price' => 1400,
@@ -1048,8 +1120,6 @@ class ProductOrderTest extends TestCase
     {
         $this->p1->update(['selling_price' => 1050, 'tax_percent' => 5]);
 
-        $this->actingAsToken($this->customer());
-
         $order = $this->paidOrder([$this->productItem($this->p1, 2)]);
 
         $this->assertSame(Order::SOURCE_ONLINE, $order->source);
@@ -1064,8 +1134,6 @@ class ProductOrderTest extends TestCase
 
     public function test_legacy_pending_and_dispatched_orders_can_still_be_marked_delivered(): void
     {
-        $this->actingAsToken($this->customer());
-
         $pending = $this->paidOrder([$this->productItem($this->p1)]);
         $dispatched = $this->paidOrder([$this->productItem($this->p2)]);
         $pending->forceFill(['status' => Order::STATUS_PENDING])->save();

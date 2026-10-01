@@ -80,16 +80,4 @@ return [
         'password' => env('ADMIN_PASSWORD'),
     ],
 
-    /*
-    |--------------------------------------------------------------------------
-    | Frontend origin
-    |--------------------------------------------------------------------------
-    |
-    | Origin of the React SPA. Only used to build the redirect target after a
-    | Google OAuth callback completes (see GoogleAuthController).
-    |
-    */
-
-    'frontend_url' => env('FRONTEND_URL', 'http://localhost:5173'),
-
 ];

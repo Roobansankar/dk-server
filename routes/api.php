@@ -21,15 +21,11 @@ use App\Http\Controllers\Api\Admin\StylistController as AdminStylistController;
 use App\Http\Controllers\Api\Admin\UserController;
 use App\Http\Controllers\Api\Admin\VideoController as AdminVideoController;
 use App\Http\Controllers\Api\AuthController;
-use App\Http\Controllers\Api\Public\AccountController;
 use App\Http\Controllers\Api\Public\AppointmentController;
-use App\Http\Controllers\Api\Public\AuthController as CustomerAuthController;
 use App\Http\Controllers\Api\Public\BookingSlotsController;
 use App\Http\Controllers\Api\Public\BrochureController;
 use App\Http\Controllers\Api\Public\ComboController;
 use App\Http\Controllers\Api\Public\GalleryController;
-use App\Http\Controllers\Api\Public\GoogleAuthController;
-use App\Http\Controllers\Api\Public\OrderController;
 use App\Http\Controllers\Api\Public\PaymentController;
 use App\Http\Controllers\Api\Public\PricingPlanController;
 use App\Http\Controllers\Api\Public\ProductCheckoutController;
@@ -73,9 +69,6 @@ Route::get('studio-holidays', [PublicStudioHolidayController::class, 'index']);
 Route::get('pricing-plans', [PricingPlanController::class, 'index']);
 Route::get('site-settings', [SiteSettingController::class, 'index']);
 Route::get('reviews', [CustomerReviewController::class, 'index']);
-// Studio brochure PDF behind the QR code on the public Contact page —
-// stylists with photos plus the full price list, generated live.
-Route::get('brochure', [BrochureController::class, 'show'])->middleware('throttle:30,1');
 // A customer's own review — pending admin approval, like a staff-entered
 // Google review. Requires a signed-in account, same as `POST /appointments`.
 Route::post('reviews', [CustomerReviewController::class, 'store'])->middleware(['throttle:6,1', 'auth:sanctum']);
@@ -83,46 +76,19 @@ Route::get('search', [SearchController::class, 'index']);
 
 // Busy-slot lookup stays public — visitors must be able to see availability
 // (and search/browse the catalogue) without an account. Creating the
-// appointment itself now requires a signed-in customer (see
-// Api\Public\AppointmentController::store) — the ownership requirement is
-// enforced here via middleware, not just trusted from the frontend.
+// appointment is public too: a guest books with just a name and phone.
 Route::get('appointments/busy', [AppointmentController::class, 'busy']);
 // Bookable times for a service on a date (with one professional, or anyone who offers it).
 Route::get('booking/slots', [BookingSlotsController::class, 'index'])->middleware('throttle:120,1');
-Route::post('appointments', [AppointmentController::class, 'store'])->middleware(['throttle:10,1', 'auth:sanctum']);
+Route::post('appointments', [AppointmentController::class, 'store'])->middleware('throttle:10,1');
 
-// Product checkout (Buy Now / cart) — signed-in customers only. `checkout`
+// Product checkout (Buy Now / cart) — public, no account needed. `checkout`
 // prices the basket server-side (App\Support\OrderPricing) and opens a
 // Razorpay order; the product order itself is only created by `verify`, after
 // the payment signature checks out.
-Route::middleware(['throttle:10,1', 'auth:sanctum'])->group(function () {
+Route::middleware('throttle:10,1')->group(function () {
     Route::post('checkout', [ProductCheckoutController::class, 'store']);
     Route::post('checkout/{checkout}/verify', [ProductCheckoutController::class, 'verify']);
-});
-
-/*
-|--------------------------------------------------------------------------
-| Customer accounts — separate from the staff /auth/* block above (which is
-| untouched), but the same underlying User model + Sanctum tokens.
-|--------------------------------------------------------------------------
-*/
-Route::prefix('account')->group(function () {
-    Route::post('register', [CustomerAuthController::class, 'register'])->middleware('throttle:6,1');
-    Route::post('login', [CustomerAuthController::class, 'login'])->middleware('throttle:6,1');
-    Route::post('forgot-password', [CustomerAuthController::class, 'forgotPassword'])->middleware('throttle:6,1');
-    Route::post('reset-password', [CustomerAuthController::class, 'resetPassword'])->middleware('throttle:6,1');
-    Route::get('google/redirect', [GoogleAuthController::class, 'redirect']);
-    Route::get('google/callback', [GoogleAuthController::class, 'callback']);
-
-    Route::middleware('auth:sanctum')->group(function () {
-        Route::post('logout', [CustomerAuthController::class, 'logout']);
-        Route::get('me', [CustomerAuthController::class, 'me']);
-        Route::match(['put', 'patch'], 'profile', [AccountController::class, 'update']);
-        Route::match(['put', 'patch'], 'password', [AccountController::class, 'updatePassword']);
-        Route::get('appointments', [AccountController::class, 'appointments']);
-        Route::get('orders', [OrderController::class, 'index']);
-        Route::get('orders/{order}', [OrderController::class, 'show']);
-    });
 });
 
 // Razorpay TEST Mode "Confirmation Fee" step — order creation + signature

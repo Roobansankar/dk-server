@@ -50,8 +50,8 @@ return [
     |
     | Enforced server-side by Sanctum's own guard (compares the token's fixed
     | `created_at` against now() on every request — see vendor/laravel/
-    | sanctum/src/Guard.php) for every `auth:sanctum` route, admin and
-    | customer alike; public routes carry no token and are unaffected. Two
+    | sanctum/src/Guard.php) for every `auth:sanctum` route (the admin
+    | API); public routes carry no token and are unaffected. Two
     | days from login/token-creation, not a sliding "last activity" window —
     | normal navigation/refreshes never reset it early.
     |

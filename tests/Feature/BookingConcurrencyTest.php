@@ -181,7 +181,6 @@ class BookingConcurrencyTest extends TestCase
 
     public function test_creation_atomically_rejects_a_slot_already_confirmed_by_another_appointment(): void
     {
-        $this->actingAsToken($this->customer());
         $stylist = Stylist::factory()->create();
         $service = $this->service(40);
         $this->offerServices($stylist, $service);

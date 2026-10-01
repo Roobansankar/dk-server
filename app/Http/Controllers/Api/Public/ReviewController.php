@@ -22,20 +22,16 @@ class ReviewController extends Controller
     }
 
     /**
-     * A signed-in customer's own review. Never auto-published — it lands in
-     * the same admin Reviews queue as a draft Google review and only reaches
-     * the public endpoint once staff flips `is_published` there, same as
-     * any other review.
+     * A visitor's own review — no account needed. Never auto-published — it
+     * lands in the same admin Reviews queue as a draft Google review and
+     * only reaches the public endpoint once staff flips `is_published`
+     * there, same as any other review.
      */
     public function store(StoreCustomerReviewRequest $request)
     {
         $review = Review::create([
-            // Ownership and display name both come from the authenticated
-            // account only — StoreCustomerReviewRequest exposes no
-            // `user_id`/`reviewer_name` field, so neither can be spoofed.
-            'user_id' => $request->user()->id,
             'source' => Review::SOURCE_CUSTOMER,
-            'reviewer_name' => $request->user()->name,
+            'reviewer_name' => $request->string('reviewer_name')->trim(),
             'rating' => $request->integer('rating'),
             'review_text' => $request->string('review_text'),
             'review_date' => now()->toDateString(),

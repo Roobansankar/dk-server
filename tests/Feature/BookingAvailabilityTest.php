@@ -92,8 +92,6 @@ class BookingAvailabilityTest extends TestCase
 
     private function book(Service $service, string $date, string $time, ?Stylist $stylist = null): TestResponse
     {
-        $this->actingAsToken($this->customer());
-
         return $this->postJson('/api/appointments', array_filter([
             'customer_name' => 'Priya R',
             'phone' => '+91 9790431212',

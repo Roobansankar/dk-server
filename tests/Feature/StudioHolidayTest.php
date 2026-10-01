@@ -110,7 +110,6 @@ class StudioHolidayTest extends TestCase
         ])->assertOk();
         $this->postJson('/api/admin/studio-holidays', ['date' => $this->monday, 'name' => 'Diwali'])->assertCreated();
 
-        $this->actingAsToken($this->customer());
         $this->postJson('/api/appointments', [
             'customer_name' => 'Priya R', 'phone' => '+91 9790431212', 'gender' => 'female',
             'category_id' => $service->service_category_id, 'service_id' => $service->id,

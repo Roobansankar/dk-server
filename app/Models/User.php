@@ -21,6 +21,11 @@ class User extends Authenticatable
 
     public const TYPE_STAFF = 'staff';
 
+    /**
+     * Legacy: customer accounts can no longer be created or signed in to.
+     * Rows of this type may still exist; `type` keeps them out of the staff
+     * user-management screens (see scopeStaff / isStaff).
+     */
     public const TYPE_CUSTOMER = 'customer';
 
     protected $fillable = [
@@ -30,8 +35,6 @@ class User extends Authenticatable
         'status',
         'type',
         'phone',
-        'google_id',
-        'google_avatar_url',
     ];
 
     protected $hidden = [
@@ -57,11 +60,6 @@ class User extends Authenticatable
         return $this->hasRole(Role::SUPERADMIN);
     }
 
-    public function isCustomer(): bool
-    {
-        return $this->type === self::TYPE_CUSTOMER;
-    }
-
     public function isStaff(): bool
     {
         return $this->type === self::TYPE_STAFF;
@@ -70,10 +68,5 @@ class User extends Authenticatable
     public function scopeStaff($query)
     {
         return $query->where('type', self::TYPE_STAFF);
-    }
-
-    public function scopeCustomers($query)
-    {
-        return $query->where('type', self::TYPE_CUSTOMER);
     }
 }

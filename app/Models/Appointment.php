@@ -263,9 +263,4 @@ class Appointment extends Model
     {
         return $query->where('source', $source);
     }
-
-    public function scopeForUser($query, int $userId)
-    {
-        return $query->where('user_id', $userId);
-    }
 }

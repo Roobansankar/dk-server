@@ -255,6 +255,7 @@ class OfflineBillingTest extends TestCase
         $this->getJson('/api/admin/offline-billing/products')->assertForbidden();
         $this->bill([$this->line($this->a, 1)])->assertForbidden();
 
+        // A legacy customer row carries no staff permission either.
         $this->actingAsToken($this->customer());
         $this->bill([$this->line($this->a, 1)])->assertForbidden();
 

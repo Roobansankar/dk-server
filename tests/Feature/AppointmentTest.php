@@ -25,9 +25,8 @@ class AppointmentTest extends TestCase
         return $service;
     }
 
-    public function test_an_authenticated_customer_can_submit_an_appointment_request(): void
+    public function test_an_appointment_request_snapshots_the_service_configuration(): void
     {
-        $this->actingAsToken($this->customer());
         $service = $this->activeService();
         $service->update(['duration_minutes' => 60, 'price' => 2000, 'advance_percentage' => 25]);
 
@@ -63,9 +62,119 @@ class AppointmentTest extends TestCase
         ]);
     }
 
+    public function test_a_guest_can_submit_an_appointment_request(): void
+    {
+        $service = $this->activeService();
+        $service->update(['duration_minutes' => 60, 'price' => 2000, 'advance_percentage' => 25]);
+
+        $response = $this->postJson('/api/appointments', [
+            'customer_name' => 'Guest Customer',
+            'phone' => '+91 9790431213',
+            'gender' => 'female',
+            'category_id' => $service->service_category_id,
+            'service_id' => $service->id,
+            'appointment_date' => now()->addDays(2)->toDateString(),
+            'appointment_time' => '14:00',
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('data.status', 'pending')
+            ->assertJsonPath('data.source', 'online')
+            ->assertJsonPath('data.customer_name', 'Guest Customer')
+            ->assertJsonPath('data.service_name', $service->name)
+            ->assertJsonPath('data.duration_minutes', 60)
+            ->assertJsonPath('data.advance_amount', fn ($v) => (float) $v === 500.0)
+            ->assertJsonPath('data.payment_status', 'unpaid')
+            ->assertJsonMissingPath('data.notes');
+
+        $this->assertDatabaseHas('appointments', [
+            'reference' => $response->json('data.reference'),
+            'user_id' => null,
+            'customer_name' => 'Guest Customer',
+            'phone' => '+91 9790431213',
+            'service_id' => $service->id,
+            'status' => 'pending',
+        ]);
+    }
+
+    public function test_a_guest_booking_is_still_validated(): void
+    {
+        $service = $this->activeService();
+
+        $this->postJson('/api/appointments', [])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['customer_name', 'phone', 'gender', 'category_id', 'appointment_date', 'appointment_time']);
+
+        $this->postJson('/api/appointments', [
+            'customer_name' => 'X',
+            'phone' => 'not-a-phone',
+            'gender' => 'female',
+            'category_id' => $service->service_category_id,
+            'service_id' => $service->id,
+            'appointment_date' => now()->subDay()->toDateString(),
+            'appointment_time' => '2pm',
+        ])->assertStatus(422)->assertJsonValidationErrors(['phone', 'appointment_date', 'appointment_time']);
+
+        $this->assertDatabaseCount('appointments', 0);
+    }
+
+    public function test_a_guest_cannot_book_a_slot_that_is_already_taken(): void
+    {
+        $category = ServiceCategory::factory()->female()->create();
+        $service = Service::factory()->forCategory($category)->create(['duration_minutes' => 60]);
+        $stylist = $this->bookableStylistFor($service);
+        $date = now()->addDays(2)->toDateString();
+
+        Appointment::factory()->forService($service)->forStylist($stylist)->create([
+            'status' => Appointment::STATUS_CONFIRMED,
+            'appointment_date' => $date,
+            'appointment_time' => '14:00',
+        ]);
+
+        $payload = [
+            'customer_name' => 'Guest Customer',
+            'phone' => '+91 9790431213',
+            'gender' => 'female',
+            'category_id' => $category->id,
+            'service_id' => $service->id,
+            'stylist_id' => $stylist->id,
+            'appointment_date' => $date,
+        ];
+
+        // Overlaps the confirmed 14:00–15:00 appointment.
+        $this->postJson('/api/appointments', $payload + ['appointment_time' => '14:30'])
+            ->assertStatus(422)->assertJsonValidationErrors('appointment_time');
+
+        // Inside the professional's 1–2 PM break.
+        $this->postJson('/api/appointments', $payload + ['appointment_time' => '13:00'])
+            ->assertStatus(422)->assertJsonValidationErrors('appointment_time');
+
+        $this->assertDatabaseCount('appointments', 1);
+    }
+
+    public function test_admin_appointment_endpoints_still_reject_guests_and_customers(): void
+    {
+        $appointment = Appointment::factory()->pending()->create();
+
+        $this->getJson('/api/admin/appointments')->assertUnauthorized();
+        $this->getJson("/api/admin/appointments/{$appointment->id}")->assertUnauthorized();
+        $this->postJson('/api/admin/appointments', [])->assertUnauthorized();
+        $this->patchJson("/api/admin/appointments/{$appointment->id}", ['status' => 'confirmed'])->assertUnauthorized();
+        $this->postJson("/api/admin/appointments/{$appointment->id}/confirm")->assertUnauthorized();
+        $this->deleteJson("/api/admin/appointments/{$appointment->id}")->assertUnauthorized();
+
+        // A legacy customer row carries no staff permission either.
+        $this->actingAsToken($this->customer());
+
+        $this->getJson('/api/admin/appointments')->assertForbidden();
+        $this->patchJson("/api/admin/appointments/{$appointment->id}", ['status' => 'confirmed'])->assertForbidden();
+        $this->deleteJson("/api/admin/appointments/{$appointment->id}")->assertForbidden();
+
+        $this->assertDatabaseHas('appointments', ['id' => $appointment->id, 'status' => 'pending']);
+    }
+
     public function test_appointment_requires_valid_service_and_future_date(): void
     {
-        $this->actingAsToken($this->customer());
         $service = $this->activeService();
 
         $this->postJson('/api/appointments', [
@@ -81,7 +190,6 @@ class AppointmentTest extends TestCase
 
     public function test_service_must_belong_to_the_given_category(): void
     {
-        $this->actingAsToken($this->customer());
         $service = $this->activeService();
         $otherCategory = ServiceCategory::factory()->create();
 
@@ -182,7 +290,6 @@ class AppointmentTest extends TestCase
 
     public function test_internal_notes_are_not_exposed_publicly(): void
     {
-        $this->actingAsToken($this->customer());
         $service = $this->activeService();
 
         $json = $this->postJson('/api/appointments', [

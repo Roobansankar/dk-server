@@ -8,8 +8,8 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * A review shown on the public homepage — either a Google review staff typed
- * in manually (no scraping/API sync), or one a signed-in customer submitted
- * directly through the website. Both share this one table/architecture and
+ * in manually (no scraping/API sync), or one a visitor submitted directly
+ * through the website (no account needed). Both share this one table/architecture and
  * the same moderation flag: `is_published` gates what the public `/reviews`
  * endpoint returns, so a customer submission (created with it `false`) only
  * ever reaches the homepage once an admin approves it here — exactly the

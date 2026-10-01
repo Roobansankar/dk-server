@@ -63,8 +63,6 @@ class WhatsAppOrderReceiptTest extends TestCase
                 ? Http::response($this->uploadReply, $this->uploadStatus)
                 : Http::response($this->messageReply, $this->messageStatus);
         });
-
-        $this->actingAsToken($this->customer());
     }
 
     private function product(string $name, int $price): Product

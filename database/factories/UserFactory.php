@@ -30,6 +30,9 @@ class UserFactory extends Factory
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
             'status' => User::STATUS_ACTIVE,
+            // Same as the column default — set here so an un-refreshed
+            // factory model answers isStaff() like a row read from the DB.
+            'type' => User::TYPE_STAFF,
             'remember_token' => Str::random(10),
         ];
     }

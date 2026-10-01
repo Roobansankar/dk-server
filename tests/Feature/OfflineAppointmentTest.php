@@ -215,7 +215,6 @@ class OfflineAppointmentTest extends TestCase
 
     public function test_public_booking_defaults_to_online_and_can_carry_a_stylist(): void
     {
-        $this->actingAsToken($this->customer());
         $service = $this->activeService();
         $stylist = Stylist::factory()->create(['name' => 'Karan M']);
         $this->offerServices($stylist, $service);

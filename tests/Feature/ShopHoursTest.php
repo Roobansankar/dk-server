@@ -106,7 +106,6 @@ class ShopHoursTest extends TestCase
 
     public function test_booking_is_rejected_outside_saved_shop_hours(): void
     {
-        $this->actingAsToken($this->customer());
         $this->setHours('10:00', '19:30');
         $service = $this->activeService();
 
@@ -119,7 +118,6 @@ class ShopHoursTest extends TestCase
 
     public function test_booking_respects_a_changed_shop_hours_window(): void
     {
-        $this->actingAsToken($this->customer());
         $service = $this->activeService();
 
         // Default window rejects 09:00...
@@ -135,7 +133,6 @@ class ShopHoursTest extends TestCase
 
     public function test_booking_within_saved_hours_still_succeeds(): void
     {
-        $this->actingAsToken($this->customer());
         $this->setHours('10:00', '19:30');
         $service = $this->activeService();
 

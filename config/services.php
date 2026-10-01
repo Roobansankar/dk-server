@@ -42,16 +42,6 @@ return [
         'secret' => env('RAZORPAY_KEY_SECRET'),
     ],
 
-    // Customer "Continue with Google" sign-in (Laravel Socialite). The secret
-    // is never sent to the frontend or returned in any API response. Blank
-    // client_id/secret means Google sign-in is not configured — the
-    // GoogleAuthController reports that cleanly instead of calling Socialite.
-    'google' => [
-        'client_id' => env('GOOGLE_CLIENT_ID'),
-        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
-        'redirect' => env('GOOGLE_REDIRECT_URI'),
-    ],
-
     // WhatsApp Cloud API (Meta) — booking confirmations via App\Support\WhatsApp.
     // Token + phone_number_id come from Meta Dashboard → WhatsApp → API Setup.
     // Blank token/id disables sending silently (booking itself is unaffected).

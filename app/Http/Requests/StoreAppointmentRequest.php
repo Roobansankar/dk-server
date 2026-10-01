@@ -16,9 +16,8 @@ class StoreAppointmentRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        // Belt-and-braces alongside the route's `auth:sanctum` middleware —
-        // an online booking always belongs to a signed-in customer.
-        return $this->user() !== null;
+        // Public endpoint — a guest can book without an account.
+        return true;
     }
 
     public function rules(): array

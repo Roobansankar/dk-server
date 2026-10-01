@@ -6,9 +6,8 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rules\Password;
 
 /**
- * Staff (admin-panel) self password change — mirrors
- * Account\UpdatePasswordRequest exactly, for the same reason AuthController
- * mirrors Public\AuthController: one auth mechanism, two audiences.
+ * Staff (admin-panel) self password change — the current password is
+ * required (see Api\AuthController::updatePassword).
  */
 class UpdatePasswordRequest extends FormRequest
 {

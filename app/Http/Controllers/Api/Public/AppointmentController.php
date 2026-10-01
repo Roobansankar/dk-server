@@ -61,14 +61,8 @@ class AppointmentController extends Controller
         $requestedStylist = $request->filled('stylist_id')
             ? Stylist::find($request->integer('stylist_id'))
             : null;
-        // The route requires `auth:sanctum`, so `$request->user()` is always
-        // present here. Ownership is derived solely from the authenticated
-        // token — there is no `user_id` field anywhere in
-        // StoreAppointmentRequest::rules(), so a crafted request body can
-        // never claim someone else's account.
-        $userId = $request->user()->id;
 
-        $appointment = DB::transaction(function () use ($request, $service, $services, $multi, $requestedStylist, $userId) {
+        $appointment = DB::transaction(function () use ($request, $service, $services, $multi, $requestedStylist) {
             // Decide who takes this booking while holding the professional's
             // whole-day lock, so a concurrent request for the same/overlapping
             // slot serialises here instead of racing past the check (see
@@ -98,7 +92,6 @@ class AppointmentController extends Controller
             }
 
             $appointment = new Appointment([
-                'user_id' => $userId,
                 'customer_name' => $request->string('customer_name'),
                 'phone' => $request->string('phone'),
                 'gender' => $request->string('gender'),

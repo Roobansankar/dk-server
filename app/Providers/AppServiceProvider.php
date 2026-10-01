@@ -25,7 +25,6 @@ use App\Policies\ServicePolicy;
 use App\Policies\SiteSettingPolicy;
 use App\Policies\UserPolicy;
 use App\Policies\VideoPolicy;
-use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\Request;
@@ -66,18 +65,5 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(SiteSetting::class, SiteSettingPolicy::class);
         Gate::policy(Review::class, ReviewPolicy::class);
         Gate::policy(Video::class, VideoPolicy::class);
-
-        // This is an API-only backend with no `password.reset` web route for
-        // the default ResetPassword notification to link to (it would throw
-        // RouteNotFoundException without this). Point it at the React SPA's
-        // own reset-password page instead.
-        ResetPassword::createUrlUsing(function (User $user, string $token) {
-            return sprintf(
-                '%s/reset-password?token=%s&email=%s',
-                rtrim(config('salon.frontend_url'), '/'),
-                $token,
-                urlencode($user->email)
-            );
-        });
     }
 }

@@ -43,19 +43,6 @@ class DevSeeder extends Seeder
             $super->assignRole(Role::SUPERADMIN);
         }
 
-        // A demo customer account (no staff role) for exercising the public
-        // account/login flows against a known, stable email. Left password
-        // untouched if it already exists — see firstOrCreate below.
-        User::firstOrCreate(
-            ['email' => 'user@dkstylehub.com'],
-            [
-                'name' => 'User',
-                'password' => Hash::make(Str::random(40)),
-                'status' => 'active',
-                'type' => User::TYPE_CUSTOMER,
-            ],
-        );
-
         // Catalogue — mirrors the frontend fallback data
         // (frontend/src/data/services.js) as closely as the schema allows.
         $this->call(ServiceCatalogueSeeder::class);

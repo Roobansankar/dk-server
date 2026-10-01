@@ -18,7 +18,10 @@ class AuthController extends Controller
     {
         $user = User::where('email', $request->string('email'))->first();
 
-        if (! $user || ! Hash::check($request->string('password'), $user->password)) {
+        // Staff only. A legacy customer row (customer accounts were removed)
+        // is refused with the same generic message as a wrong password, so
+        // this endpoint can't be used to sign in as — or probe for — one.
+        if (! $user || ! $user->isStaff() || ! Hash::check($request->string('password'), $user->password)) {
             throw ValidationException::withMessages([
                 'email' => __('auth.failed'),
             ]);
@@ -50,6 +53,8 @@ class AuthController extends Controller
 
     public function me(Request $request): UserResource
     {
+        $this->ensureStaff($request);
+
         return new UserResource($request->user()->load('roles'));
     }
 
@@ -62,15 +67,28 @@ class AuthController extends Controller
      */
     public function updatePassword(UpdatePasswordRequest $request): JsonResponse
     {
+        $this->ensureStaff($request);
+
         $user = $request->user();
         $user->update(['password' => Hash::make($request->string('password'))]);
 
-        // See AccountController::updatePassword for why this is nullable.
+        // `currentAccessToken()` is only set when the request came in via a
+        // Sanctum bearer token; guard the (rare) case it's absent rather
+        // than revoke every token including the caller's own.
         $currentTokenId = $user->currentAccessToken()?->id;
         $user->tokens()
             ->when($currentTokenId, fn ($q) => $q->where('id', '!=', $currentTokenId))
             ->delete();
 
         return response()->json(['message' => 'Your password has been updated.']);
+    }
+
+    /**
+     * A still-unexpired token issued to a legacy customer account (before
+     * customer sign-in was removed) must not work as a session here.
+     */
+    private function ensureStaff(Request $request): void
+    {
+        abort_unless($request->user()->isStaff(), 403, 'This action is unauthorized.');
     }
 }

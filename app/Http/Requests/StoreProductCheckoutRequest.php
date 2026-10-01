@@ -15,9 +15,8 @@ class StoreProductCheckoutRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        // Alongside the route's `auth:sanctum`: orders belong to customer
-        // accounts, not staff.
-        return $this->user()?->isCustomer() === true;
+        // Public endpoint — a guest can check out without an account.
+        return true;
     }
 
     public function rules(): array

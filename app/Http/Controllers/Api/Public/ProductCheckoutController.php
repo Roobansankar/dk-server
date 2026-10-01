@@ -57,11 +57,8 @@ class ProductCheckoutController extends Controller
             return response()->json(['message' => $e->getMessage()], 502);
         }
 
-        // Ownership comes from the token only — there is no user_id in
-        // StoreProductCheckoutRequest::rules().
         $checkout = ProductCheckout::create([
             'reference' => $reference,
-            'user_id' => $request->user()->id,
             'customer_name' => $request->validated('customer_name'),
             'phone' => $request->validated('phone'),
             'lines' => $priced['lines'],
@@ -107,9 +104,11 @@ class ProductCheckoutController extends Controller
         ProductCheckout $checkout,
         ProductInventoryService $inventory
     ): JsonResponse {
-        // 404, not 403, so a guessed id doesn't confirm the checkout exists.
-        abort_unless($checkout->user_id === $request->user()->id, 404);
-
+        // There are no customer accounts, so there is no ownership check.
+        // What proves this request is the payment for this checkout is
+        // below: the Razorpay order id must be the one this checkout was
+        // opened with, and the signature (an HMAC only Razorpay can produce,
+        // over that order id + payment id) must verify.
         $data = $request->validate([
             'razorpay_order_id' => ['required', 'string'],
             'razorpay_payment_id' => ['required', 'string'],
@@ -197,7 +196,6 @@ class ProductCheckoutController extends Controller
              * transaction rolls back, so this order will not remain.
              */
             $order = new Order([
-                'user_id' => $locked->user_id,
                 'customer_name' => $locked->customer_name,
                 'phone' => $locked->phone,
                 'subtotal' => $locked->amount,

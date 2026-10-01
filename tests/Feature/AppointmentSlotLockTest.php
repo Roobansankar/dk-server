@@ -214,7 +214,6 @@ class AppointmentSlotLockTest extends TestCase
 
     public function test_public_booking_is_rejected_when_it_overlaps_a_confirmed_appointment(): void
     {
-        $this->actingAsToken($this->customer());
         $stylist = Stylist::factory()->create();
         $service = $this->service(90);
         $this->offerServices($stylist, $service);
@@ -239,7 +238,6 @@ class AppointmentSlotLockTest extends TestCase
 
     public function test_public_booking_with_no_stylist_is_assigned_to_a_free_professional(): void
     {
-        $this->actingAsToken($this->customer());
         $busy = Stylist::factory()->create(['sort_order' => 1]);
         $free = Stylist::factory()->create(['sort_order' => 2]);
         $service = $this->service(90);
@@ -269,7 +267,6 @@ class AppointmentSlotLockTest extends TestCase
 
     public function test_public_booking_with_no_stylist_is_rejected_when_everyone_is_busy(): void
     {
-        $this->actingAsToken($this->customer());
         $only = Stylist::factory()->create();
         $service = $this->service(90);
         $this->offerServices($only, $service);

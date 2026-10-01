@@ -143,9 +143,4 @@ class Order extends Model
     {
         return $this->hasMany(OrderItem::class)->orderBy('id');
     }
-
-    public function scopeForUser($query, int $userId)
-    {
-        return $query->where('user_id', $userId);
-    }
 }
