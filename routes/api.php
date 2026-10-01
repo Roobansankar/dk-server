@@ -66,6 +66,9 @@ Route::get('gallery', [GalleryController::class, 'index']);
 Route::get('videos', [VideoController::class, 'index']);
 Route::get('stylists', [StylistController::class, 'index']);
 Route::get('studio-holidays', [PublicStudioHolidayController::class, 'index']);
+// The studio brochure PDF — viewed inline by default (the /brochure page embeds
+// this URL), or forced as a real download with ?download=1 (see BrochureController).
+Route::get('brochure', [BrochureController::class, 'show']);
 Route::get('pricing-plans', [PricingPlanController::class, 'index']);
 Route::get('site-settings', [SiteSettingController::class, 'index']);
 Route::get('reviews', [CustomerReviewController::class, 'index']);
