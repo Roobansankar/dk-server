@@ -307,6 +307,8 @@ Route::prefix('admin')->middleware(['auth:sanctum'])->group(function () {
 
     // Videos (homepage Video marquee)
     Route::get('videos', [AdminVideoController::class, 'index'])->middleware('permission:videos.view');
+    // Before videos/{video} — otherwise "status" would bind as a {video} id.
+    Route::get('videos/status', [AdminVideoController::class, 'status'])->middleware('permission:videos.view');
     Route::get('videos/{video}', [AdminVideoController::class, 'show'])->middleware('permission:videos.view');
     Route::post('videos/reorder', [AdminVideoController::class, 'reorder'])->middleware('permission:videos.manage');
     Route::post('videos', [AdminVideoController::class, 'store'])->middleware('permission:videos.manage');

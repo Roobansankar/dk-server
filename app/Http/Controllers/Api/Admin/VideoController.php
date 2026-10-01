@@ -36,6 +36,22 @@ class VideoController extends Controller
         return (new VideoResource($video))->response()->setStatusCode(201);
     }
 
+    /**
+     * How uploads are handled on this server — the admin Videos page shows
+     * the matching notice (compression vs store-as-is).
+     */
+    public function status()
+    {
+        $driver = VideoUploader::driver();
+
+        return response()->json([
+            'data' => [
+                'driver' => $driver,
+                'compression' => $driver === 'ffmpeg',
+            ],
+        ]);
+    }
+
     public function show(Video $video)
     {
         return new VideoResource($video);

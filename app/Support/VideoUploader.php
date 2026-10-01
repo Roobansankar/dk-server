@@ -11,19 +11,22 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Homepage video uploads: transcodes to a smaller, browser-compatible H.264
- * MP4 via ffmpeg before storing (real compression, not a renamed copy — see
- * store()), plus a best-effort WebP poster frame. Delegates the generic
- * disk operations (url/delete) to ImageUploader — a stored path is a stored
- * path regardless of media type, and there's no reason to duplicate that.
+ * Homepage video uploads, in two modes (config('salon.video_uploads.driver')):
  *
- * Requires a working `ffmpeg` on the server (config('salon.video_uploads.
- * ffmpeg_path'), defaults to relying on $PATH) with a usable H.264 encoder,
- * AND a PHP build that allows shell execution (proc_open) — some shared
- * hosting plans disable it. If any of that isn't available, store() throws
- * VideoProcessingException with a specific, actionable message rather than
- * silently storing the uncompressed original under a false "compressed"
- * pretence.
+ * - "ffmpeg" (default): transcodes to a smaller, browser-compatible H.264
+ *   MP4 via ffmpeg before storing (real compression, not a renamed copy —
+ *   see store()), plus a best-effort WebP poster frame. Requires a working
+ *   `ffmpeg` with a usable H.264 encoder, AND a PHP build that allows shell
+ *   execution (proc_open) — some shared hosting plans disable it.
+ * - "direct": stores the file exactly as uploaded — no transcoding, no
+ *   thumbnail, no shell calls whatsoever. For shared hosting (e.g. Hostinger)
+ *   where ffmpeg is unavailable. Set VIDEO_DRIVER=direct in .env. Browsers
+ *   render the first frame on their own (preload="metadata"), so the missing
+ *   poster changes nothing visually.
+ *
+ * Delegates the generic disk operations (url/delete) to ImageUploader — a
+ * stored path is a stored path regardless of media type, and there's no
+ * reason to duplicate that.
  */
 class VideoUploader
 {
@@ -64,20 +67,35 @@ class VideoUploader
     }
 
     /**
-     * Transcode + store an uploaded video. Returns the stored relative paths
-     * — callers persist these, not a URL. No application-level size limit —
-     * the Form Request only validates mime/extension (see config('salon.
-     * video_uploads')) — this method transcodes whatever comes through,
-     * shrinking it to the bitrate/width constants below regardless of the
-     * original's size.
+     * Whether uploads are transcoded (ffmpeg) or stored as-is (direct).
+     */
+    public static function driver(): string
+    {
+        return strtolower((string) config('salon.video_uploads.driver', 'ffmpeg')) === 'direct'
+            ? 'direct'
+            : 'ffmpeg';
+    }
+
+    /**
+     * Store an uploaded video. Returns the stored relative paths — callers
+     * persist these, not a URL.
+     *
+     * ffmpeg driver: transcodes + stores (see method body). direct driver:
+     * stores the original file untouched and returns a null thumbnail.
+     * No application-level size limit — the Form Request validates
+     * mime/extension/size (see config('salon.video_uploads')).
      *
      * @return array{video_path: string, thumbnail_path: ?string}
      *
-     * @throws ValidationException the uploaded file itself couldn't be transcoded (likely not a real/valid video)
+     * @throws ValidationException the uploaded file itself couldn't be processed (likely not a real/valid video)
      * @throws VideoProcessingException the server environment can't process video right now (ffmpeg/proc_open/storage)
      */
     public static function store(UploadedFile $file, string $directory): array
     {
+        if (self::driver() === 'direct') {
+            return self::storeDirect($file, $directory);
+        }
+
         self::assertShellExecutionAvailable();
         $ffmpeg = config('salon.video_uploads.ffmpeg_path');
         $ffprobe = config('salon.video_uploads.ffprobe_path');
@@ -180,6 +198,35 @@ class VideoUploader
         } finally {
             self::cleanup([$outputTmp, $thumbTmp]);
         }
+    }
+
+    /**
+     * Direct mode: store the upload untouched — no shell, no temp files, no
+     * thumbnail. The Form Request has already validated mime/extension/size;
+     * the extension allow-list is re-checked here as defence in depth.
+     *
+     * @return array{video_path: string, thumbnail_path: null}
+     */
+    private static function storeDirect(UploadedFile $file, string $directory): array
+    {
+        $directory = trim($directory, '/');
+        $extension = strtolower((string) $file->getClientOriginalExtension());
+        $allowed = array_map('strtolower', (array) config('salon.video_uploads.mimes', []));
+
+        if ($extension === '' || ($allowed !== [] && ! in_array($extension, $allowed, true))) {
+            throw ValidationException::withMessages([
+                'video' => 'That file type is not allowed. Please upload one of: '.implode(', ', $allowed).'.',
+            ]);
+        }
+
+        $videoPath = $directory.'/'.Str::uuid()->toString().'.'.$extension;
+        Storage::disk(self::disk())->put($videoPath, file_get_contents($file->getRealPath()));
+
+        Log::info('VideoUploader: stored original without transcoding (direct driver).', [
+            'video_path' => $videoPath,
+        ]);
+
+        return ['video_path' => $videoPath, 'thumbnail_path' => null];
     }
 
     /**
