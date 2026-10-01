@@ -126,6 +126,17 @@ class AppointmentController extends Controller
             } else {
                 $appointment->applyServiceSnapshot($service, $stylist);
             }
+
+            // Paid in full from the very start — no advance-then-balance ever
+            // happened, so the bill shouldn't itemise an "advance" (the
+            // service snapshot's advance_amount is just the service's own
+            // configured percentage, not evidence any split payment occurred).
+            // Matches amount_received/service_price exactly, so the bill's
+            // own split check (advance > 0 && balance > 0) comes out false.
+            if ($appointment->payment_status === Appointment::PAYMENT_PAID) {
+                $appointment->advance_amount = $appointment->service_price;
+            }
+
             $appointment->applyStylistSnapshot($stylist);
             $appointment->save();
 

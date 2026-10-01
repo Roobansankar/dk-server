@@ -71,6 +71,31 @@ class OfflineAppointmentTest extends TestCase
         ]);
     }
 
+    public function test_paid_in_full_from_the_start_does_not_carry_the_services_partial_advance(): void
+    {
+        // Created "paid in full" directly — no advance-then-balance ever
+        // happened — unlike the default (advance_paid) flow above, which
+        // correctly snapshots the service's 25% (₹300 of ₹1,200).
+        $this->actingAsToken($this->superadmin());
+        $service = $this->activeService();
+
+        $response = $this->postJson('/api/admin/appointments', $this->payload([
+            '_service' => $service,
+            'payment_status' => 'paid',
+            'payment_method' => 'cash',
+        ]))->assertCreated();
+
+        // advance_amount now equals the full price, not the service's 25% —
+        // the bill's own split check (advance > 0 && balance > 0) needs this
+        // to come out false, since nothing was ever paid in two parts here.
+        $response->assertJsonPath('data.advance_amount', fn ($v) => (float) $v === 1200.0);
+        $this->assertDatabaseHas('appointments', [
+            'id' => $response->json('data.id'),
+            'payment_status' => 'paid',
+            'advance_amount' => 1200.00,
+        ]);
+    }
+
     public function test_offline_creation_requires_the_offline_permission(): void
     {
         $this->actingAsToken($this->userWith(['appointments.view', 'appointments.manage']));

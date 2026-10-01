@@ -500,6 +500,25 @@ class WhatsAppPaymentReceiptTest extends TestCase
         $this->assertSame('appointment_booked2', $this->messages()[0]['template']['name']);
     }
 
+    public function test_an_unpaid_confirmed_offline_appointment_also_alerts_the_owner(): void
+    {
+        // The customer gets appointment_booked2 (asserted above) — this
+        // confirms the owner gets notified too in that same unpaid/offline
+        // path, not just the advance_paid one (see
+        // test_the_owner_booking_alert_matches_the_six_params_meta_has_on_file
+        // for that one).
+        config(['services.whatsapp.owner_phone' => '9876500003']);
+
+        $appointment = $this->createOffline(['payment_status' => 'unpaid']);
+
+        $this->assertCount(2, $this->messages());
+        $owner = collect($this->messages())->first(fn ($m) => $m['template']['name'] === 'owner_booking_alert_v2');
+
+        $this->assertNotNull($owner, 'owner_booking_alert_v2 was never sent');
+        $this->assertSame('919876500003', $owner['to']);
+        $this->assertStringContainsString($appointment->reference, collect($owner['template']['components'][0]['parameters'])->pluck('text')->implode(' '));
+    }
+
     public function test_a_walk_in_already_completed_and_paid_in_full_gets_the_receipt(): void
     {
         $this->createOffline(['status' => 'completed', 'payment_status' => 'paid']);
