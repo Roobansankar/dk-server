@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\DeleteAllRequest;
 use App\Http\Requests\Admin\StoreOfflineAppointmentRequest;
 use App\Http\Requests\Admin\UpdateAppointmentRequest;
 use App\Http\Resources\AppointmentResource;
@@ -201,6 +202,31 @@ class AppointmentController extends Controller
         $appointment->delete();
 
         return response()->noContent();
+    }
+
+    /**
+     * "Delete All" on Admin → Appointments and Admin → Appointment History.
+     * Both pages are views over this one table, so they share this endpoint:
+     * it permanently removes every appointment, whatever its status, source
+     * or the filters / page currently on screen. Nothing else references an
+     * appointment row (payment state lives on the row itself), and services,
+     * stylists, working hours, holidays and settings are never touched — so
+     * booking keeps working and every slot simply becomes free again.
+     *
+     * One transaction: either every appointment goes or none does.
+     */
+    public function destroyAll(DeleteAllRequest $request)
+    {
+        $this->authorize('deleteAny', Appointment::class);
+
+        $deleted = DB::transaction(fn () => Appointment::query()->delete());
+
+        return response()->json([
+            'message' => $deleted === 0
+                ? 'There were no appointments to delete.'
+                : "Deleted {$deleted} ".($deleted === 1 ? 'appointment' : 'appointments').'.',
+            'deleted' => ['appointments' => $deleted],
+        ]);
     }
 
     public function update(UpdateAppointmentRequest $request, Appointment $appointment)

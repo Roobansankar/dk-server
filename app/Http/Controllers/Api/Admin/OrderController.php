@@ -3,9 +3,14 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\DeleteAllRequest;
 use App\Http\Requests\Admin\UpdateOrderStatusRequest;
 use App\Http\Resources\OrderResource;
 use App\Models\Order;
+use App\Models\OrderItem;
+use App\Models\OrderItemProduct;
+use App\Models\ProductCheckout;
+use App\Models\ProductStockMovement;
 use App\Support\BookingAvailability;
 use App\Support\OrderBillPdf;
 use Illuminate\Database\Eloquent\Builder;
@@ -110,6 +115,55 @@ class OrderController extends Controller
         });
 
         return new OrderResource($order->load('items.selectedProducts'));
+    }
+
+    /**
+     * "Delete All" on Admin → Orders: permanently removes every product
+     * order the page lists — online and offline bills alike, whatever the
+     * filters / page currently on screen — with the rows an order owns:
+     *
+     *   - order_item_products → order_items → orders, children first;
+     *   - the paid product_checkouts those orders were created from. Left
+     *     behind (order_id nulled by the FK), a replayed payment verification
+     *     would rebuild the order and deduct its stock a second time.
+     *
+     * Inventory is deliberately left alone. The stock was really sold, so
+     * `products.stock_quantity` is not restored, and the sale rows in
+     * product_stock_movements stay as stock history — only their link to the
+     * vanished order is cleared (the order number survives in `reason`).
+     * Products, combos and unpaid checkouts still mid-payment are untouched.
+     *
+     * One transaction, on the ids locked at the start: any failure rolls the
+     * whole thing back, and an order placed while this runs is not caught up.
+     */
+    public function destroyAll(DeleteAllRequest $request)
+    {
+        $deleted = DB::transaction(function () {
+            $deleted = ['orders' => 0, 'order_items' => 0, 'order_item_products' => 0, 'product_checkouts' => 0];
+
+            $orderIds = Order::query()->lockForUpdate()->pluck('id');
+
+            foreach ($orderIds->chunk(500) as $ids) {
+                // Query-builder update: detaching must not bump updated_at on stock history.
+                ProductStockMovement::query()->whereIn('order_id', $ids)->toBase()->update(['order_id' => null]);
+
+                $deleted['product_checkouts'] += ProductCheckout::query()->whereIn('order_id', $ids)->delete();
+                $deleted['order_item_products'] += OrderItemProduct::query()
+                    ->whereIn('order_item_id', OrderItem::query()->select('id')->whereIn('order_id', $ids))
+                    ->delete();
+                $deleted['order_items'] += OrderItem::query()->whereIn('order_id', $ids)->delete();
+                $deleted['orders'] += Order::query()->whereKey($ids)->delete();
+            }
+
+            return $deleted;
+        });
+
+        return response()->json([
+            'message' => $deleted['orders'] === 0
+                ? 'There were no orders to delete.'
+                : "Deleted {$deleted['orders']} ".($deleted['orders'] === 1 ? 'order' : 'orders').'. Product stock was not changed.',
+            'deleted' => $deleted,
+        ]);
     }
 
     /** Validated list filters shared by index() and export(). */

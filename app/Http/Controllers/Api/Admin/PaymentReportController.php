@@ -3,11 +3,13 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\DeleteAllRequest;
 use App\Http\Resources\AppointmentResource;
 use App\Models\Appointment;
 use App\Support\AppointmentFilters;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use OpenSpout\Common\Entity\Row;
 use OpenSpout\Writer\XLSX\Writer;
 
@@ -80,6 +82,29 @@ class PaymentReportController extends Controller
         return response()->download($path, 'dk-stylehub-payments-'.now()->format('Y-m-d').'.xlsx', [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         ])->deleteFileAfterSend();
+    }
+
+    /**
+     * "Delete All" on Admin → Payment Report. The report has no table of its
+     * own — it is the paid-or-completed slice of `appointments` — so this
+     * removes exactly those appointments (every one the unfiltered report
+     * lists) and leaves the rest: pending, confirmed-but-unpaid, cancelled
+     * and rejected bookings that never reached the report stay put.
+     *
+     * One transaction: either the whole slice goes or none of it does.
+     */
+    public function destroyAll(DeleteAllRequest $request)
+    {
+        $this->authorize('deleteAny', Appointment::class);
+
+        $deleted = DB::transaction(fn () => Appointment::query()->paidOrCompleted()->delete());
+
+        return response()->json([
+            'message' => $deleted === 0
+                ? 'There were no payment records to delete.'
+                : "Deleted {$deleted} ".($deleted === 1 ? 'payment record' : 'payment records').' and the appointments they belonged to.',
+            'deleted' => ['appointments' => $deleted],
+        ]);
     }
 
     /** @param  Collection<int, Appointment>  $rows */

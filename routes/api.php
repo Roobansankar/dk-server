@@ -39,6 +39,7 @@ use App\Http\Controllers\Api\Public\StudioHolidayController as PublicStudioHolid
 use App\Http\Controllers\Api\Public\StylistController;
 use App\Http\Controllers\Api\Public\VideoController;
 use App\Http\Controllers\Api\Public\WhatsAppWebhookController;
+use App\Models\Role;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -112,6 +113,12 @@ Route::post('whatsapp/webhook', [WhatsAppWebhookController::class, 'receive']);
 |--------------------------------------------------------------------------
 */
 Route::prefix('admin')->middleware(['auth:sanctum'])->group(function () {
+
+    // Bulk "Delete All" endpoints: on top of the page's own manage permission
+    // they are limited to the built-in admin / superadmin roles (a custom
+    // role that merely holds the permission cannot wipe a whole table) and
+    // tightly throttled. DeleteAllRequest also demands the confirmation phrase.
+    $deleteAll = ['role:'.Role::SUPERADMIN.'|'.Role::ADMIN, 'throttle:5,1'];
 
     Route::get('dashboard', DashboardController::class)->middleware('permission:dashboard.view');
 
@@ -217,6 +224,9 @@ Route::prefix('admin')->middleware(['auth:sanctum'])->group(function () {
     // Bill / invoice PDF for one order (same file WhatsApp sends on payment).
     Route::get('orders/{order}/bill', [AdminOrderController::class, 'bill'])->middleware('permission:orders.view');
     Route::match(['put', 'patch'], 'orders/{order}/status', [AdminOrderController::class, 'updateStatus'])->middleware('permission:orders.manage');
+    // "Delete All" on the Orders page — every order (online + offline) with its
+    // items; stock is left as it is. Admin / superadmin only, see $deleteAll.
+    Route::delete('orders', [AdminOrderController::class, 'destroyAll'])->middleware(['permission:orders.manage', ...$deleteAll]);
 
     // Offline billing — an in-person product sale recorded as a paid,
     // confirmed order (source = offline). Same stock + pricing as online.
@@ -241,6 +251,9 @@ Route::prefix('admin')->middleware(['auth:sanctum'])->group(function () {
     Route::post('appointments/{appointment}/confirm', [AdminAppointmentController::class, 'confirm'])->middleware('permission:appointments.manage');
     Route::match(['put', 'patch'], 'appointments/{appointment}', [AdminAppointmentController::class, 'update'])->middleware('permission:appointments.manage');
     Route::delete('appointments/{appointment}', [AdminAppointmentController::class, 'destroy'])->middleware('permission:appointments.manage');
+    // "Delete All" on the Appointments and Appointment History pages (one
+    // table, one endpoint). Admin / superadmin only, see $deleteAll.
+    Route::delete('appointments', [AdminAppointmentController::class, 'destroyAll'])->middleware(['permission:appointments.manage', ...$deleteAll]);
 
     // Stylists
     Route::middleware('permission:stylists.view')->group(function () {
@@ -265,6 +278,10 @@ Route::prefix('admin')->middleware(['auth:sanctum'])->group(function () {
     // Payments / completed-appointment reporting
     Route::get('payments', [PaymentReportController::class, 'index'])->middleware('permission:payments.view');
     Route::get('payments/export', [PaymentReportController::class, 'export'])->middleware('permission:payments.export');
+    // "Delete All" on the Payment Report page — the report is a view over
+    // appointments, so this deletes the paid-or-completed appointments it
+    // lists and therefore needs appointments.manage as well.
+    Route::delete('payments', [PaymentReportController::class, 'destroyAll'])->middleware(['permission:payments.view', 'permission:appointments.manage', ...$deleteAll]);
 
     // Gallery
     Route::get('gallery', [AdminGalleryController::class, 'index'])->middleware('permission:gallery.view');
