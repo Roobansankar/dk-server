@@ -19,8 +19,7 @@ class StudioBrochureTest extends TestCase
     public function test_brochure_is_viewable_inline_by_default(): void
     {
         // Default (no ?download=1): "inline", not "attachment" — scanning
-        // the QR / opening this URL must not silently start a download; the
-        // /brochure page embeds exactly this URL to show the PDF in place.
+        // the QR / opening this URL must not silently start a download.
         $category = ServiceCategory::factory()->female()->create(['name' => 'Haircuts Test']);
         $service = Service::factory()->create([
             'service_category_id' => $category->id,
@@ -40,6 +39,11 @@ class StudioBrochureTest extends TestCase
             'dk-stylehub-studio-brochure.pdf',
             $response->headers->get('Content-Disposition')
         );
+        // Dompdf's stream() doesn't set this itself (unlike download()) — a
+        // phone's inline PDF viewer that needs the total size up front to
+        // render every page, not just the first, was regressing on exactly
+        // this gap. Must match the body exactly, not just be present.
+        $this->assertEquals(strlen($response->getContent()), (int) $response->headers->get('Content-Length'));
         $this->assertStringStartsWith('%PDF', $response->getContent());
     }
 
