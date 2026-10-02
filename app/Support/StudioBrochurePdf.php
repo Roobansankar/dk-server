@@ -20,57 +20,16 @@ class StudioBrochurePdf
     {
         $settings = SiteSetting::allValues();
 
-        $stylists = Stylist::query()
-            ->active()
-            ->ordered()
-            ->with([
-                'services' => fn ($q) => $q->where('services.status', true)->ordered(),
-                'services.category',
-            ])
-            ->get()
-            ->map(function (Stylist $stylist) {
-                // Grouped men → women, each category-wise. Gender variants
-                // share a service name, so dedupe per (gender, name).
-                $groups = ['male' => [], 'female' => []];
-                foreach ($stylist->services as $service) {
-                    $gender = $service->category?->gender ?? 'male';
-                    if (! isset($groups[$gender])) {
-                        continue;
-                    }
-                    $catName = $service->category?->name ?? 'Services';
-                    $skey = mb_strtolower(trim($service->name));
-                    if (isset($groups[$gender][$catName]['seen'][$skey])) {
-                        continue;
-                    }
-                    $groups[$gender][$catName]['seen'][$skey] = true;
-                    $groups[$gender][$catName]['services'][] = [
-                        'name' => $service->name,
-                        'price' => $service->pivot->price !== null
-                            ? (float) $service->pivot->price
-                            : ($service->price !== null ? (float) $service->price : null),
-                    ];
-                    $groups[$gender][$catName]['order'] ??= $service->category?->sort_order ?? 0;
-                }
-                $shape = function ($list) {
-                    $groups = array_values(array_filter(
-                        array_map(fn ($name, $g) => [
-                            'category' => $name,
-                            'order' => $g['order'],
-                            'services' => $g['services'],
-                        ], array_keys($list), array_values($list)),
-                        fn ($g) => count($g['services']) > 0,
-                    ));
-                    usort($groups, fn ($a, $b) => [$a['order'], $a['category']] <=> [$b['order'], $b['category']]);
-
-                    return $groups;
-                };
-                $men = $shape($groups['male']);
-                $women = $shape($groups['female']);
+        $stylists = self::stylistsWithServices()
+            ->map(function (array $entry) {
+                ['stylist' => $stylist, 'men' => $men, 'women' => $women] = $entry;
 
                 // One table row per index (men left, women right) so both
                 // columns pack with no empty gaps AND rows stay short enough
                 // to break across pages — a single giant row never fits and
-                // leaves a gap.
+                // leaves a gap. PDF-layout-only, so it's built here rather
+                // than in stylistsWithServices() (the JSON API has no need
+                // for it — a webpage just stacks the two lists).
                 $rows = [];
                 if (count($men) > 0 && count($women) > 0) {
                     $n = max(count($men), count($women));
@@ -111,6 +70,68 @@ class StudioBrochurePdf
     public static function filename(): string
     {
         return 'dk-stylehub-studio-brochure.pdf';
+    }
+
+    /**
+     * Every active stylist with their services grouped men → women, each
+     * category-wise and deduped (gender variants share a service name).
+     * Shared by the PDF above and the JSON brochure page data — each shapes
+     * this differently from here (the PDF pairs rows into print columns and
+     * embeds a downscaled photo; the web page just wants a plain image URL).
+     *
+     * @return \Illuminate\Support\Collection<int, array{stylist: Stylist, men: array, women: array}>
+     */
+    public static function stylistsWithServices(): \Illuminate\Support\Collection
+    {
+        return Stylist::query()
+            ->active()
+            ->ordered()
+            ->with([
+                'services' => fn ($q) => $q->where('services.status', true)->ordered(),
+                'services.category',
+            ])
+            ->get()
+            ->map(function (Stylist $stylist) {
+                $groups = ['male' => [], 'female' => []];
+                foreach ($stylist->services as $service) {
+                    $gender = $service->category?->gender ?? 'male';
+                    if (! isset($groups[$gender])) {
+                        continue;
+                    }
+                    $catName = $service->category?->name ?? 'Services';
+                    $skey = mb_strtolower(trim($service->name));
+                    if (isset($groups[$gender][$catName]['seen'][$skey])) {
+                        continue;
+                    }
+                    $groups[$gender][$catName]['seen'][$skey] = true;
+                    $groups[$gender][$catName]['services'][] = [
+                        'name' => $service->name,
+                        'price' => $service->pivot->price !== null
+                            ? (float) $service->pivot->price
+                            : ($service->price !== null ? (float) $service->price : null),
+                    ];
+                    $groups[$gender][$catName]['order'] ??= $service->category?->sort_order ?? 0;
+                }
+                $shape = function ($list) {
+                    $groups = array_values(array_filter(
+                        array_map(fn ($name, $g) => [
+                            'category' => $name,
+                            'order' => $g['order'],
+                            'services' => $g['services'],
+                        ], array_keys($list), array_values($list)),
+                        fn ($g) => count($g['services']) > 0,
+                    ));
+                    usort($groups, fn ($a, $b) => [$a['order'], $a['category']] <=> [$b['order'], $b['category']]);
+
+                    return $groups;
+                };
+
+                return [
+                    'stylist' => $stylist,
+                    'men' => $shape($groups['male']),
+                    'women' => $shape($groups['female']),
+                ];
+            });
     }
 
     /**

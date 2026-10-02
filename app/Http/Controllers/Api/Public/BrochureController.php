@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api\Public;
 
 use App\Http\Controllers\Controller;
+use App\Models\SiteSetting;
+use App\Support\ImageUploader;
 use App\Support\StudioBrochurePdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -46,6 +48,36 @@ class BrochureController extends Controller
         $headers['Accept-Ranges'] = 'none';
 
         return response($bytes, 200, $headers);
+    }
+
+    /**
+     * Same stylists/services/prices as the PDF, as plain JSON — what the
+     * /brochure page itself renders as a normal scrollable webpage instead
+     * of a PDF. Dropped the PDF-only page-pairing and swapped the PDF's
+     * downscaled data-URI photo for a normal image URL the browser can just
+     * load directly.
+     */
+    public function data()
+    {
+        $settings = SiteSetting::allValues();
+
+        $stylists = StudioBrochurePdf::stylistsWithServices()
+            ->map(fn (array $entry) => [
+                'name' => $entry['stylist']->name,
+                'bio' => $entry['stylist']->bio,
+                'initial' => mb_strtoupper(mb_substr($entry['stylist']->name ?? '?', 0, 1)),
+                'photoUrl' => ImageUploader::url($entry['stylist']->image_path),
+                'men' => $entry['men'],
+                'women' => $entry['women'],
+            ])
+            ->values();
+
+        return response()->json(['data' => [
+            'salonName' => $settings->get('salon_name', 'DK StyleHub'),
+            'salonPhone' => $settings->get('phone'),
+            'salonAddress' => $settings->get('address'),
+            'stylists' => $stylists,
+        ]]);
     }
 
     /**

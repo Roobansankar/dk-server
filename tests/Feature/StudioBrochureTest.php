@@ -89,4 +89,37 @@ class StudioBrochureTest extends TestCase
         $response->assertOk();
         $this->assertSame('none', $response->headers->get('Accept-Ranges'));
     }
+
+    public function test_brochure_data_matches_the_pdfs_stylists_and_prices(): void
+    {
+        $category = ServiceCategory::factory()->male()->create(['name' => 'Haircuts Test', 'sort_order' => 1]);
+        $service = Service::factory()->create([
+            'service_category_id' => $category->id,
+            'name' => 'Signature Cut Test',
+            'price' => 650,
+            'duration_minutes' => 40,
+        ]);
+        $stylist = Stylist::factory()->create(['name' => 'Data Stylist Test', 'bio' => 'Loves a clean fade.']);
+        $stylist->services()->attach($service->id);
+
+        $response = $this->getJson('/api/brochure-data');
+
+        $response->assertOk()
+            ->assertJsonPath('data.stylists.0.name', 'Data Stylist Test')
+            ->assertJsonPath('data.stylists.0.bio', 'Loves a clean fade.')
+            ->assertJsonPath('data.stylists.0.men.0.category', 'Haircuts Test')
+            ->assertJsonPath('data.stylists.0.men.0.services.0.name', 'Signature Cut Test')
+            ->assertJsonPath('data.stylists.0.men.0.services.0.price', fn ($v) => (float) $v === 650.0)
+            ->assertJsonPath('data.stylists.0.women', []);
+    }
+
+    public function test_brochure_data_gives_a_loadable_photo_url_not_a_pdf_data_uri(): void
+    {
+        $stylist = Stylist::factory()->create(['name' => 'No Photo Stylist Test', 'image_path' => null]);
+
+        $response = $this->getJson('/api/brochure-data');
+
+        $response->assertOk()->assertJsonPath('data.stylists.0.name', 'No Photo Stylist Test');
+        $this->assertNull($response->json('data.stylists.0.photoUrl'));
+    }
 }
