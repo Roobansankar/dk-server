@@ -66,4 +66,27 @@ class StudioBrochureTest extends TestCase
         $response->assertOk();
         $this->assertStringStartsWith('%PDF', $response->getContent());
     }
+
+    public function test_repeated_requests_return_byte_identical_content(): void
+    {
+        // Dompdf embeds a render timestamp, so two independently rendered
+        // copies are never byte-identical even though both are valid PDFs
+        // on their own. A phone that reads a large inline PDF across more
+        // than one HTTP request (e.g. a Range request for later pages) was
+        // landing on two *different* renders for the same URL, corrupting
+        // the document after whatever page the first request covered.
+        // Caching the bytes for a few minutes is what prevents that.
+        $first = $this->get('/api/brochure')->getContent();
+        $second = $this->get('/api/brochure')->getContent();
+
+        $this->assertSame($first, $second);
+    }
+
+    public function test_inline_response_tells_clients_not_to_split_it_into_range_requests(): void
+    {
+        $response = $this->get('/api/brochure');
+
+        $response->assertOk();
+        $this->assertSame('none', $response->headers->get('Accept-Ranges'));
+    }
 }
