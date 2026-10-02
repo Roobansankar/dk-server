@@ -109,6 +109,19 @@ class WhatsAppOrderReceiptTest extends TestCase
         return $this->verify($this->checkout($items, $phone));
     }
 
+    /** A walk-in bill paid at the studio counter, via Admin → Offline Billing. */
+    private function billOffline(array $items, array $overrides = []): TestResponse
+    {
+        $this->actingAsToken($this->userWith(['orders.view', 'orders.manage']));
+
+        return $this->postJson('/api/admin/offline-billing', array_merge([
+            'items' => $items,
+            'customer_name' => 'Walk-in Ravi',
+            'phone' => '9876543210',
+            'payment_method' => 'cash',
+        ], $overrides));
+    }
+
     /** @return array<int, Request> */
     private function requestsEndingIn(string $suffix): array
     {
@@ -252,6 +265,57 @@ class WhatsAppOrderReceiptTest extends TestCase
 
         $this->assertCount(1, $this->messages());
         $this->assertSame('Hair Care Package x1', $this->bodyOf($this->messages()[0])[2]['text']);
+    }
+
+    // --- Offline billing (walk-in, paid at the counter) also notifies --------
+
+    public function test_an_offline_bill_sends_the_order_paid_template_with_the_bill_pdf(): void
+    {
+        $oil = $this->product('Argan Oil', 800);
+
+        $this->billOffline([['product_id' => $oil->id, 'quantity' => 2]])->assertCreated();
+
+        $order = Order::firstOrFail();
+        $this->assertCount(1, $this->uploads());
+        $this->assertCount(1, $this->messages());
+
+        $message = $this->messages()[0];
+        $this->assertSame('919876543210', $message['to']);
+        $this->assertSame('order_paid', $message['template']['name']);
+        $this->assertSame(
+            ['Walk-in Ravi', $order->order_number, 'Argan Oil x2', '1,600.00'],
+            collect($this->bodyOf($message))->pluck('text')->all(),
+        );
+    }
+
+    public function test_an_offline_bill_also_alerts_the_owner(): void
+    {
+        config(['services.whatsapp.owner_phone' => '9876500002']);
+
+        $this->billOffline([['product_id' => $this->product('Argan Oil', 800)->id, 'quantity' => 1]])
+            ->assertCreated();
+
+        $order = Order::firstOrFail();
+        $owner = collect($this->messages())->first(fn ($m) => $m['template']['name'] === 'owner_order_alert');
+
+        $this->assertNotNull($owner, 'owner_order_alert was never sent');
+        $this->assertSame('919876500002', $owner['to']);
+        $this->assertSame(
+            ['Walk-in Ravi', $order->phone, $order->order_number, '800.00'],
+            collect($this->bodyOf($owner))->pluck('text')->all(),
+        );
+    }
+
+    public function test_an_offline_bill_with_no_phone_sends_nothing_but_still_bills(): void
+    {
+        $this->billOffline(
+            [['product_id' => $this->product('Argan Oil', 800)->id, 'quantity' => 1]],
+            ['phone' => null],
+        )->assertCreated();
+
+        $this->assertSame(1, Order::count());
+        $this->assertCount(0, $this->uploads());
+        $this->assertCount(0, $this->messages());
     }
 
     // --- Only a genuinely new, paid order sends -------------------------------

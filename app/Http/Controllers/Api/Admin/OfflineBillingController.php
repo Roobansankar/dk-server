@@ -10,10 +10,12 @@ use App\Models\Product;
 use App\Services\ProductInventoryService;
 use App\Support\ImageUploader;
 use App\Support\OrderPricing;
+use App\Support\WhatsApp;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Admin → Offline Billing: a walk-in customer buys products in the studio and
@@ -105,6 +107,19 @@ class OfflineBillingController extends Controller
 
             return $order;
         });
+
+        // Paid in person just now → WhatsApp the customer their bill + alert
+        // the owner, same as the online-checkout path. Best-effort: never
+        // throws, and skips quietly (logged) when the walk-in gave no phone.
+        try {
+            DB::afterCommit(function () use ($order) {
+                $fresh = $order->fresh();
+                WhatsApp::sendOrderPaid($fresh);
+                WhatsApp::sendOwnerOrderAlert($fresh);
+            });
+        } catch (\Throwable $e) {
+            Log::warning('WhatsApp after offline bill skipped: '.$e->getMessage());
+        }
 
         return (new OrderResource($order->load('items.selectedProducts')))
             ->additional(['message' => 'Offline bill created.'])
