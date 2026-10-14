@@ -9,11 +9,15 @@ use App\Http\Resources\BusySlotResource;
 use App\Models\Appointment;
 use App\Models\Service;
 use App\Models\Stylist;
+use App\Support\AppointmentSlots;
 use App\Support\BookingAvailability;
+use App\Support\PayAtStore;
+use App\Support\WhatsApp;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
 class AppointmentController extends Controller
@@ -61,8 +65,26 @@ class AppointmentController extends Controller
         $requestedStylist = $request->filled('stylist_id')
             ? Stylist::find($request->integer('stylist_id'))
             : null;
+        $payAtStore = $request->wantsPayAtStore();
 
-        $appointment = DB::transaction(function () use ($request, $service, $services, $multi, $requestedStylist) {
+        [$appointment, $created] = DB::transaction(function () use ($request, $service, $services, $multi, $requestedStylist, $payAtStore) {
+            $date = $request->date('appointment_date')->toDateString();
+            $time = $request->input('appointment_time');
+
+            // Pay at Store retry (double click, dropped response): the first
+            // attempt already holds this exact slot, so resolving again would
+            // only report a clash with itself. Under the professional's day
+            // lock, hand back that same appointment instead — no second
+            // booking, no second WhatsApp.
+            if ($payAtStore) {
+                AppointmentSlots::lockDay($requestedStylist->id, $date);
+
+                $existing = PayAtStore::findRetry((string) $request->string('phone'), $requestedStylist->id, $date, $time, $services);
+                if ($existing) {
+                    return [$existing, false];
+                }
+            }
+
             // Decide who takes this booking while holding the professional's
             // whole-day lock, so a concurrent request for the same/overlapping
             // slot serialises here instead of racing past the check (see
@@ -75,15 +97,15 @@ class AppointmentController extends Controller
                 ? BookingAvailability::resolveServices(
                     $services,
                     $requestedStylist,
-                    $request->date('appointment_date')->toDateString(),
-                    $request->input('appointment_time'),
+                    $date,
+                    $time,
                     lock: true,
                 )
                 : BookingAvailability::resolve(
                     $service,
                     $requestedStylist,
-                    $request->date('appointment_date')->toDateString(),
-                    $request->input('appointment_time'),
+                    $date,
+                    $time,
                     lock: true,
                 );
 
@@ -106,14 +128,63 @@ class AppointmentController extends Controller
                 $appointment->applyServiceSnapshot($service, $stylist);
             }
             $appointment->applyStylistSnapshot($stylist);
+
+            if ($payAtStore) {
+                // The full price just snapshotted (this professional's own
+                // price where set) against the limit saved right now — nothing
+                // the client sent about price or eligibility is consulted.
+                if (! PayAtStore::allows($appointment->service_price)) {
+                    throw ValidationException::withMessages([
+                        'payment_option' => 'Pay at Store isn’t available for this booking. Please continue with the advance payment.',
+                    ]);
+                }
+
+                // Confirmed now (the slot is checked and locked above, so a
+                // confirmed row is what reserves it), with the whole bill due
+                // at the studio.
+                $appointment->status = Appointment::STATUS_CONFIRMED;
+                $appointment->payment_status = Appointment::PAYMENT_UNPAID;
+                $appointment->payment_method = Appointment::PAYMENT_METHOD_PAY_AT_STORE;
+            }
+
             $appointment->save();
 
-            return $appointment;
+            return [$appointment, true];
         });
+
+        if ($payAtStore) {
+            if ($created) {
+                $this->notifyPayAtStoreBooked($appointment);
+            }
+
+            return (new AppointmentResource($appointment))
+                ->additional(['message' => 'Your appointment is confirmed. Please pay at the studio when you arrive.'])
+                ->response()
+                ->setStatusCode($created ? 201 : 200);
+        }
 
         return (new AppointmentResource($appointment))
             ->additional(['message' => 'Your appointment request has been received. The studio will confirm it shortly.'])
             ->response()
             ->setStatusCode(201);
+    }
+
+    /**
+     * Same WhatsApp pair as an admin-created confirmed + unpaid booking: the
+     * customer's just-booked message (`appointment_booked2`, no amount — it
+     * never claims a payment) plus the owner's new-booking alert. Best-effort:
+     * a WhatsApp failure never fails or undoes the booking.
+     */
+    private function notifyPayAtStoreBooked(Appointment $appointment): void
+    {
+        try {
+            DB::afterCommit(function () use ($appointment) {
+                $fresh = $appointment->fresh();
+                WhatsApp::sendBookingBooked($fresh);
+                WhatsApp::sendOwnerBookingAlert($fresh);
+            });
+        } catch (\Throwable $e) {
+            Log::warning('WhatsApp after Pay at Store booking skipped: '.$e->getMessage());
+        }
     }
 }

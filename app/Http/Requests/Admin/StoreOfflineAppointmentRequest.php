@@ -57,7 +57,7 @@ class StoreOfflineAppointmentRequest extends FormRequest
 
             if ($this->filled('pricing_plan_id')) {
                 if (! PricingPlan::find($this->integer('pricing_plan_id'))?->duration_minutes) {
-                    $validator->errors()->add('pricing_plan_id', 'Set a time on this plan (Pricing Plans → Edit) before booking it.');
+                    $validator->errors()->add('pricing_plan_id', 'Set a time on this combo (Service Combos → Edit) before booking it.');
                 }
 
                 return;

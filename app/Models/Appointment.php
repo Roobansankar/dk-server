@@ -44,6 +44,14 @@ class Appointment extends Model
 
     public const PAYMENT_METHODS = ['upi', 'cash', 'card'];
 
+    /**
+     * Online "Pay at Store" booking: confirmed straight away, nothing paid
+     * online, the whole bill due at the studio (see App\Support\PayAtStore).
+     * Deliberately NOT in PAYMENT_METHODS — staff never pick it, and the
+     * actual cash/UPI/card used at the studio goes in balance_payment_method.
+     */
+    public const PAYMENT_METHOD_PAY_AT_STORE = 'pay_at_store';
+
     public const SOURCE_ONLINE = 'online';
 
     public const SOURCE_OFFLINE = 'offline';

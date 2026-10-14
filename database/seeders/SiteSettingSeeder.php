@@ -29,6 +29,9 @@ class SiteSettingSeeder extends Seeder
             // hours the picker shipped with.
             ['shop_opens_at', '10:00', 'time', 'shop_hours'],
             ['shop_closes_at', '19:30', 'time', 'shop_hours'],
+            // Highest full service price that may book online with "Pay at
+            // Store" (INR). Empty = the option is off until an admin sets it.
+            ['pay_at_store_max_amount', null, 'currency', 'payments'],
             ['instagram_url', 'https://www.instagram.com/the_dk__stylehub', 'string', 'social'],
             ['whatsapp_url', 'https://wa.me/message/B32HQTKZGU3HF1', 'string', 'social'],
             ['facebook_url', null, 'string', 'social'],

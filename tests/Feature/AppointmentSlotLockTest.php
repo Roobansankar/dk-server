@@ -7,6 +7,7 @@ use App\Models\Service;
 use App\Models\ServiceCategory;
 use App\Models\Stylist;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Tests\Concerns\CreatesAdmins;
 use Tests\Concerns\CreatesBookableStylists;
 use Tests\TestCase;
@@ -20,6 +21,22 @@ class AppointmentSlotLockTest extends TestCase
     use CreatesAdmins, CreatesBookableStylists, RefreshDatabase;
 
     private string $date = '2026-10-05';
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // $date is fixed, so freeze "now" before it (studio time) — otherwise
+        // the public booking tests fail "date must be today or later" once
+        // the real calendar passes it. Also anchors the helper professionals'
+        // work dates (CreatesBookableStylists::workDates) around this day.
+        Carbon::setTestNow(Carbon::parse('2026-10-01 09:00', 'Asia/Kolkata'));
+    }
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+        parent::tearDown();
+    }
 
     private function service(int $minutes): Service
     {

@@ -6,6 +6,7 @@ use App\Models\SiteSetting;
 use App\Models\Stylist;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Barryvdh\DomPDF\PDF as DomPdf;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 
 /**
@@ -79,9 +80,9 @@ class StudioBrochurePdf
      * this differently from here (the PDF pairs rows into print columns and
      * embeds a downscaled photo; the web page just wants a plain image URL).
      *
-     * @return \Illuminate\Support\Collection<int, array{stylist: Stylist, men: array, women: array}>
+     * @return Collection<int, array{stylist: Stylist, men: array, women: array}>
      */
-    public static function stylistsWithServices(): \Illuminate\Support\Collection
+    public static function stylistsWithServices(): Collection
     {
         return Stylist::query()
             ->active()

@@ -34,9 +34,12 @@ class AppointmentResource extends JsonResource
             'amount_received' => round($this->amount_received, 2),
             'remaining_amount' => $this->remaining_amount,
             'payment_status' => $this->payment_status,
-            // offline (staff-recorded) payments only, admin-only
+            // offline (staff-recorded) payments, admin-only — plus an online
+            // "Pay at Store" booking, which is the one online method recorded
+            // here (not sensitive: the booking page shows it to the customer)
             'payment_method' => $this->when(
-                $this->source === Appointment::SOURCE_OFFLINE && $request->user()?->can('appointments.view'),
+                ($this->source === Appointment::SOURCE_OFFLINE && $request->user()?->can('appointments.view'))
+                    || $this->payment_method === Appointment::PAYMENT_METHOD_PAY_AT_STORE,
                 $this->payment_method,
             ),
             // online bookings only: how the balance was paid at the salon

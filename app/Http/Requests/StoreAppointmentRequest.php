@@ -7,6 +7,7 @@ use App\Models\SiteSetting;
 use App\Models\Stylist;
 use App\Support\AppointmentSlots;
 use App\Support\BookingAvailability;
+use App\Support\PayAtStore;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
@@ -14,6 +15,15 @@ use Illuminate\Validation\Validator;
 
 class StoreAppointmentRequest extends FormRequest
 {
+    public const ADVANCE = 'advance';
+
+    public const PAY_AT_STORE = 'pay_at_store';
+
+    public function wantsPayAtStore(): bool
+    {
+        return $this->input('payment_option') === self::PAY_AT_STORE;
+    }
+
     public function authorize(): bool
     {
         // Public endpoint — a guest can book without an account.
@@ -30,9 +40,16 @@ class StoreAppointmentRequest extends FormRequest
             'service_id' => ['required_without:service_ids', 'nullable', 'integer', Rule::exists('services', 'id')->where('status', true)],
             'service_ids' => ['required_without:service_id', 'nullable', 'array', 'min:1', 'max:10'],
             'service_ids.*' => ['integer', Rule::exists('services', 'id')->where('status', true)],
-            'stylist_id' => ['nullable', 'integer', Rule::exists('stylists', 'id')->where('status', true)],
+            // Pay at Store needs a named professional: their own price for the
+            // service is what the limit is checked against, and their day lock
+            // is what makes a retried request find its first attempt.
+            'stylist_id' => ['nullable', 'required_if:payment_option,'.self::PAY_AT_STORE, 'integer', Rule::exists('stylists', 'id')->where('status', true)],
             'appointment_date' => ['required', 'date', 'after_or_equal:today'],
             'appointment_time' => ['required', 'date_format:H:i'],
+            // Omitted / "advance" = the existing confirmation-fee flow. Only
+            // the CHOICE is taken from the client — eligibility is decided
+            // server-side (Public\AppointmentController::store).
+            'payment_option' => ['sometimes', 'nullable', 'string', Rule::in([self::ADVANCE, self::PAY_AT_STORE])],
         ];
     }
 
@@ -127,6 +144,15 @@ class StoreAppointmentRequest extends FormRequest
             // immediately before the appointment is actually created (see
             // Public\AppointmentController::store).
             $stylist = $this->filled('stylist_id') ? Stylist::find($this->integer('stylist_id')) : null;
+
+            // A Pay at Store retry already holds this slot — it would only
+            // "clash" with itself here. The controller hands that same booking
+            // back (re-checked under the day lock), so skip the fast check.
+            if ($this->wantsPayAtStore() && $stylist
+                && PayAtStore::findRetry((string) $this->string('phone'), $stylist->id, $requestedDate->toDateString(), $time, $services)
+            ) {
+                return;
+            }
 
             [, $error] = $multi
                 ? BookingAvailability::resolveServices($services, $stylist, $requestedDate->toDateString(), $time)

@@ -20,6 +20,9 @@ class UpdateSiteSettingsRequest extends FormRequest
             // Opening hours are stored as zero-padded 24-hour "H:i" strings.
             'settings.shop_opens_at' => ['sometimes', 'nullable', 'date_format:H:i'],
             'settings.shop_closes_at' => ['sometimes', 'nullable', 'date_format:H:i'],
+            // Pay at Store limit in INR — a plain non-negative amount (up to 2
+            // decimals). Blank switches Pay at Store off.
+            'settings.pay_at_store_max_amount' => ['sometimes', 'nullable', 'numeric', 'decimal:0,2', 'min:0', 'max:9999999.99'],
         ];
     }
 

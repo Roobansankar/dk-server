@@ -37,6 +37,10 @@ class BookingSlotBufferTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // The fixed booking dates above must stay in the future whatever
+        // day the suite runs — freeze "now" before them (studio time).
+        // Tests that probe "already passed" set their own clock.
+        Carbon::setTestNow(Carbon::parse('2026-10-01 09:00', 'Asia/Kolkata'));
         Cache::flush();
         $this->setHours('10:00', '19:30');
     }

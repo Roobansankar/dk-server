@@ -69,7 +69,7 @@ Route::get('stylists', [StylistController::class, 'index']);
 Route::get('studio-holidays', [PublicStudioHolidayController::class, 'index']);
 // The studio brochure PDF — a real download with ?download=1, or the default
 // inline view (used by the Settings admin print QR directly; see BrochureController).
-Route::get('brochure', [BrochureController::class, 'show']);
+Route::get('brochure', [BrochureController::class, 'show'])->middleware('throttle:30,1');
 // Same stylists/services/prices as the PDF, as JSON — what the /brochure
 // page itself renders as a normal scrollable webpage.
 Route::get('brochure-data', [BrochureController::class, 'data']);
@@ -77,8 +77,8 @@ Route::get('pricing-plans', [PricingPlanController::class, 'index']);
 Route::get('site-settings', [SiteSettingController::class, 'index']);
 Route::get('reviews', [CustomerReviewController::class, 'index']);
 // A customer's own review — pending admin approval, like a staff-entered
-// Google review. Requires a signed-in account, same as `POST /appointments`.
-Route::post('reviews', [CustomerReviewController::class, 'store'])->middleware(['throttle:6,1', 'auth:sanctum']);
+// Google review. Public — no account needed, same as `POST /appointments`.
+Route::post('reviews', [CustomerReviewController::class, 'store'])->middleware('throttle:6,1');
 Route::get('search', [SearchController::class, 'index']);
 
 // Busy-slot lookup stays public — visitors must be able to see availability
